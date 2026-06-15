@@ -14,22 +14,23 @@ const HOJAS = {
   LOG:         'LOG',
 };
 
-// Columnas exactas del CSV de KoboToolbox
+// Nombres reales de columnas en el CSV de KoboToolbox
+// (detectados automáticamente del export — pueden variar según configuración del formulario)
 const COL = {
-  CREAMOS_ID:       'Creamos ID',
-  NOMBRE:           'Nombre(s)',
-  APELLIDO:         'Apellido(s)',
+  CREAMOS_ID:       'Creamos_ID',
+  NOMBRE:           'Nombre_s',
+  APELLIDO:         'Apellido_s',
   FECHA:            'Fecha',
   PROYECTO:         'Proyecto',
   FASE:             'Fase',
-  ESPECIALIDAD:     'Formaciones / Especialidad',
-  MOTIVO_DESCUENTO: 'Formaciones / Motivo de descuento',
-  INCENTIVO:        'Formaciones / Incentivo',
-  TOTAL_HORAS:      'Formaciones / Total de horas',
-  MONTO_TOTAL:      'Formaciones / Monto total',
-  COMENTARIOS:      'Formaciones / Comentarios',
-  FIRMA_FORMACION:  'Formaciones / Firma',
-  FIRMA:            'Firma',
+  ESPECIALIDAD:     'group_bm1bx44/Especialidad',
+  MOTIVO_DESCUENTO: 'group_bm1bx44/Motivo_de_descuento',
+  INCENTIVO:        'group_bm1bx44/Incentivo',
+  TOTAL_HORAS:      'group_bm1bx44/Total_de_horas',
+  MONTO_TOTAL:      'group_bm1bx44/Monto_total',
+  COMENTARIOS:      'group_bm1bx44/Comentarios',
+  FIRMA_FORMACION:  'group_bm1bx44/Firma',
+  FIRMA:            'Firma_001',
   KOBO_ID:          '_id',
   UUID:             '_uuid',
   SUBMISSION_TIME:  '_submission_time',
@@ -43,7 +44,20 @@ const COL = {
   ROOT_UUID:        'meta/rootUuid',
 };
 
-// Orden de columnas en la hoja DATOS
+// Columnas a mostrar en la hoja DATOS (nombres amigables para el encabezado)
+const HEADERS_DISPLAY = [
+  'Creamos ID', 'Nombre', 'Apellido', 'Fecha',
+  'Proyecto', 'Fase',
+  'Especialidad', 'Motivo de descuento', 'Incentivo',
+  'Total horas', 'Monto total', 'Comentarios',
+  'Firma formación', 'Firma',
+  '_id', '_uuid', '_submission_time',
+  '_validation_status', '_notes', '_status',
+  '_submitted_by', '_tags', '_index',
+  '__version__', 'meta/rootUuid',
+];
+
+// Columnas en el CSV (mismo orden que HEADERS_DISPLAY)
 const HEADERS_DATOS = [
   COL.CREAMOS_ID, COL.NOMBRE, COL.APELLIDO, COL.FECHA,
   COL.PROYECTO,   COL.FASE,
@@ -74,20 +88,26 @@ const AÑO_FILTRO = 2026;
 // ============================================================
 
 /**
- * Parsea un CSV completo manejando campos entre comillas y comas internas.
+ * Parsea un CSV completo. Detecta automáticamente si el separador es , o ;
  * Devuelve array de objetos {columna: valor}.
  */
 function parseCSV(csvText) {
   const lines = splitCSVLines(csvText);
   if (lines.length < 2) return [];
 
-  const headers = parseCSVLine(lines[0]);
+  // Detectar delimitador: cuenta cuántas , y ; hay en la primera línea
+  const primeraLinea = lines[0];
+  const nComas = (primeraLinea.match(/,/g) || []).length;
+  const nPuntoComa = (primeraLinea.match(/;/g) || []).length;
+  const delimitador = nPuntoComa > nComas ? ';' : ',';
+
+  const headers = parseCSVLine(lines[0], delimitador);
   const rows = [];
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
-    const values = parseCSVLine(line);
+    const values = parseCSVLine(line, delimitador);
     const obj = {};
     headers.forEach((h, idx) => {
       obj[h.trim()] = (values[idx] !== undefined) ? values[idx].trim() : '';
@@ -120,7 +140,8 @@ function splitCSVLines(text) {
   return lines;
 }
 
-function parseCSVLine(line) {
+function parseCSVLine(line, sep) {
+  const delim = sep || ',';
   const fields = [];
   let current = '';
   let inQuotes = false;
@@ -134,7 +155,7 @@ function parseCSVLine(line) {
       } else {
         inQuotes = !inQuotes;
       }
-    } else if (ch === ',' && !inQuotes) {
+    } else if (ch === delim && !inQuotes) {
       fields.push(current);
       current = '';
     } else {
@@ -584,10 +605,10 @@ function _obtenerIDsExistentes() {
   return ids;
 }
 
-/** Asegura que la hoja DATOS tenga los encabezados correctos. */
+/** Asegura que la hoja DATOS tenga los encabezados correctos (nombres amigables). */
 function _asegurarEncabezadosDatos(hoja) {
   if (hoja.getLastRow() === 0) {
-    escribirEncabezados(hoja, HEADERS_DATOS, COLORES.PRIMARIO);
+    escribirEncabezados(hoja, HEADERS_DISPLAY, COLORES.PRIMARIO);
   }
 }
 
