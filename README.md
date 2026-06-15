@@ -40,21 +40,13 @@ Sistema completo en **Google Sheets + Apps Script** para registrar, controlar y 
 1. En el menú del spreadsheet: **Extensiones → Apps Script**
 2. Se abrirá el editor de código
 
-### Paso 3: Copiar los archivos de código
+### Paso 3: Copiar el código
 
-En el editor de Apps Script, crea los siguientes archivos y copia el contenido de cada uno:
-
-| Archivo en este repo | Crear en Apps Script |
-|---------------------|---------------------|
-| `src/Config.gs` | `Config.gs` |
-| `src/Utils.gs` | `Utils.gs` |
-| `src/Menu.gs` | `Menu.gs` |
-| `src/Importar.gs` | `Importar.gs` |
-| `src/Dashboard.gs` | `Dashboard.gs` |
-| `src/Cohortes.gs` | `Cohortes.gs` |
-| `src/Presupuesto.gs` | `Presupuesto.gs` |
-
-> **Tip**: Puedes eliminar el archivo `Code.gs` vacío que crea Apps Script por defecto.
+1. Abre el archivo **`DPEstipendios.gs`** de este repositorio
+2. Copia **todo** su contenido
+3. En el editor de Apps Script, haz clic en el archivo `Code.gs` que aparece por defecto
+4. **Borra todo** lo que hay y **pega** el contenido copiado
+5. Guarda (Ctrl+S)
 
 ### Paso 4: Guardar y ejecutar la configuración inicial
 
@@ -102,24 +94,6 @@ Cuando se crea una nueva cohorte en KoboToolbox:
 1. La próxima importación traerá los nuevos registros automáticamente
 2. La hoja COHORTES mostrará la nueva cohorte sin configuración adicional
 3. En PRESUPUESTO, agrega una fila con el nombre del nuevo proyecto y su presupuesto
-
----
-
-## Desarrollo con clasp (opcional)
-
-Si quieres gestionar el código desde este repositorio usando [clasp](https://github.com/google/clasp):
-
-```bash
-npm install -g @google/clasp
-clasp login
-```
-
-Actualiza `.clasp.json` con tu `scriptId` (lo encuentras en Apps Script → Configuración del proyecto).
-
-```bash
-clasp push   # subir cambios al Apps Script
-clasp pull   # bajar cambios desde Apps Script
-```
 
 ---
 
