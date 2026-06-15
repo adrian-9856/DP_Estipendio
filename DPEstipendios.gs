@@ -294,15 +294,16 @@ function ajustarColumnas(hoja, desde, hasta, maximo) {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('DP Estipendios')
-    .addItem('Importar datos desde KoboToolbox', 'importarDesdeKobo')
+    .addItem('⬇️ Importar datos desde KoboToolbox', 'importarDesdeKobo')
+    .addItem('🔄 Reimportar TODO (borra y recarga)', 'reimportarTodo')
     .addSeparator()
-    .addItem('Actualizar Dashboard', 'actualizarDashboard')
-    .addItem('Actualizar Cohortes', 'actualizarCohortes')
-    .addItem('Actualizar Presupuesto', 'actualizarResumenPresupuesto')
+    .addItem('📊 Actualizar Dashboard', 'actualizarDashboard')
+    .addItem('👥 Actualizar Cohortes', 'actualizarCohortes')
+    .addItem('💰 Actualizar Presupuesto', 'actualizarResumenPresupuesto')
     .addSeparator()
-    .addItem('Configurar estructura inicial', 'configurarEstructuraInicial')
-    .addItem('Activar importación automática diaria', 'activarTriggerDiario')
-    .addItem('Desactivar importación automática', 'desactivarTriggerDiario')
+    .addItem('⚙️ Configurar estructura inicial', 'configurarEstructuraInicial')
+    .addItem('⏰ Activar importación automática diaria', 'activarTriggerDiario')
+    .addItem('🚫 Desactivar importación automática', 'desactivarTriggerDiario')
     .addToUi();
 }
 
@@ -373,6 +374,36 @@ function desactivarTriggerDiario() {
   ScriptApp.getProjectTriggers()
     .filter(t => t.getHandlerFunction() === 'importarDesdeKobo')
     .forEach(t => ScriptApp.deleteTrigger(t));
+}
+
+/**
+ * Borra todos los datos de la hoja DATOS y reimporta todo desde KoboToolbox.
+ * Usar cuando los datos están desincronizados o para forzar una carga limpia.
+ */
+function reimportarTodo() {
+  const ui = SpreadsheetApp.getUi();
+  const respuesta = ui.alert(
+    '¿Confirmar reimportación?',
+    'Esto borrará TODOS los datos actuales de la hoja DATOS y los volverá a importar desde KoboToolbox.\n\n¿Deseas continuar?',
+    ui.ButtonSet.YES_NO
+  );
+  if (respuesta !== ui.Button.YES) return;
+
+  try {
+    // Limpiar hoja DATOS
+    const hojaDatos = obtenerOCrearHoja(HOJAS.DATOS);
+    hojaDatos.clearContents();
+    hojaDatos.clearFormats();
+    escribirEncabezados(hojaDatos, HEADERS_DATOS, COLORES.PRIMARIO);
+    escribirLog('Reimportación: hoja DATOS limpiada.', 'INFO');
+
+    // Reimportar
+    importarDesdeKobo();
+
+  } catch (e) {
+    escribirLog('Error en reimportación: ' + e.message, 'ERROR');
+    ui.alert('Error', e.message, ui.ButtonSet.OK);
+  }
 }
 
 function _ordenarHojas() {
@@ -457,9 +488,18 @@ function importarDesdeKobo() {
     });
 
     if (filasNuevas.length === 0) {
-      const msg = 'No hay registros nuevos. Todos ya estaban importados.';
+      // Diagnóstico: cuántos registros hay en DATOS
+      const hojaDatos = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJAS.DATOS);
+      const filasEnDatos = hojaDatos ? Math.max(0, hojaDatos.getLastRow() - 1) : 0;
+      const msg = 'No hay registros nuevos. Todos ya estaban importados.\n\n' +
+        'Registros actualmente en hoja DATOS: ' + filasEnDatos + '\n' +
+        'Registros en KoboToolbox (2026): ' + filasFiltradas.length;
       escribirLog(msg, 'INFO');
-      ui.alert('Sin novedades', msg, ui.ButtonSet.OK);
+      // Aunque no haya nuevos, actualiza las vistas con lo que ya hay
+      actualizarDashboard();
+      actualizarCohortes();
+      actualizarResumenPresupuesto();
+      ui.alert('Sin novedades', msg + '\n\nEl Dashboard ha sido actualizado con los datos existentes.', ui.ButtonSet.OK);
       return;
     }
 
