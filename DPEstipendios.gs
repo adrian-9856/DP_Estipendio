@@ -442,15 +442,16 @@ function importarDesdeKobo() {
     const filas = parseCSV(csvText);
     escribirLog('CSV descargado. Registros totales: ' + filas.length, 'INFO');
 
-    // 3. Diagnóstico: muestra los primeros valores de fecha encontrados
+    // 3. Diagnóstico: muestra columnas reales del CSV y valores de la primera fila
     if (filas.length > 0) {
-      const ejemploFecha = filas[0][COL.FECHA]           || '(vacío)';
-      const ejemploSub   = filas[0][COL.SUBMISSION_TIME] || '(vacío)';
-      escribirLog(
-        'Formato de fechas detectado — Fecha: "' + ejemploFecha +
-        '" | _submission_time: "' + ejemploSub + '"',
-        'INFO'
-      );
+      const colsReales = Object.keys(filas[0]);
+      escribirLog('Columnas del CSV (' + colsReales.length + '): ' + colsReales.join(' | '), 'INFO');
+      const uuidReal = filas[0][COL.UUID]          || '(col _uuid no encontrada)';
+      const idReal   = filas[0][COL.KOBO_ID]       || '(col _id no encontrada)';
+      const fechaReal = filas[0][COL.FECHA]         || '(col Fecha no encontrada)';
+      const subReal  = filas[0][COL.SUBMISSION_TIME]|| '(col _submission_time no encontrada)';
+      escribirLog('Primera fila — _uuid: "' + uuidReal + '" | _id: "' + idReal +
+        '" | Fecha: "' + fechaReal + '" | sub_time: "' + subReal + '"', 'INFO');
     }
 
     // 4. Filtrar solo AÑO_FILTRO — busca el año como texto en cualquier campo de fecha
@@ -478,13 +479,19 @@ function importarDesdeKobo() {
       return;
     }
 
-    // 5. Obtener UUIDs ya importados
-    const uuidsExistentes = _obtenerUUIDsExistentes();
+    // 5. Obtener IDs ya importados (usa _uuid o _id como clave única)
+    const idsExistentes = _obtenerIDsExistentes();
 
-    // 6. Filtrar duplicados
+    // 6. Filtrar duplicados — si no tiene ningún ID único, importar de todas formas
     const filasNuevas = filasFiltradas.filter(f => {
-      const uuid = (f[COL.UUID] || '').trim();
-      return uuid && !uuidsExistentes.has(uuid);
+      const uuid = (f[COL.UUID]     || '').trim();
+      const id   = (f[COL.KOBO_ID] || '').trim();
+      // Sin ningún identificador → siempre importar
+      if (!uuid && !id) return true;
+      // Excluir si ya existe cualquiera de los dos IDs
+      if (uuid && idsExistentes.has(uuid)) return false;
+      if (id   && idsExistentes.has(id))   return false;
+      return true;
     });
 
     if (filasNuevas.length === 0) {
@@ -562,16 +569,19 @@ function _fetchCSV(url) {
   return respuesta.getContentText('UTF-8');
 }
 
-/** Retorna un Set con todos los _uuid ya importados en la hoja DATOS. */
-function _obtenerUUIDsExistentes() {
+/** Retorna un Set con todos los _uuid y _id ya importados en la hoja DATOS. */
+function _obtenerIDsExistentes() {
   const hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJAS.DATOS);
   if (!hoja || hoja.getLastRow() < 2) return new Set();
 
-  const colUUID = HEADERS_DATOS.indexOf(COL.UUID) + 1;
-  if (colUUID === 0) return new Set();
-
-  const valores = hoja.getRange(2, colUUID, hoja.getLastRow() - 1, 1).getValues();
-  return new Set(valores.flat().map(v => String(v).trim()).filter(v => v));
+  const ids = new Set();
+  [COL.UUID, COL.KOBO_ID].forEach(colNombre => {
+    const colIdx = HEADERS_DATOS.indexOf(colNombre) + 1;
+    if (colIdx === 0) return;
+    const valores = hoja.getRange(2, colIdx, hoja.getLastRow() - 1, 1).getValues();
+    valores.flat().forEach(v => { const s = String(v).trim(); if (s) ids.add(s); });
+  });
+  return ids;
 }
 
 /** Asegura que la hoja DATOS tenga los encabezados correctos. */
