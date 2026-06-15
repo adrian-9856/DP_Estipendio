@@ -186,24 +186,39 @@ function parseMonto(valor) {
   return isNaN(num) ? 0 : num;
 }
 
+// Mapa de meses en español (abreviados y completos) a número
+const MESES_NUM = {
+  'ene': 1, 'enero': 1, 'jan': 1,
+  'feb': 2, 'febrero': 2,
+  'mar': 3, 'marzo': 3,
+  'abr': 4, 'abril': 4, 'apr': 4,
+  'may': 5, 'mayo': 5,
+  'jun': 6, 'junio': 6,
+  'jul': 7, 'julio': 7,
+  'ago': 8, 'agosto': 8, 'aug': 8,
+  'sep': 9, 'sept': 9, 'septiembre': 9,
+  'oct': 10, 'octubre': 10,
+  'nov': 11, 'noviembre': 11,
+  'dic': 12, 'diciembre': 12, 'dec': 12,
+};
+
 /** Extrae el año de un string de fecha en cualquier formato. */
 function extraerAño(valor) {
   if (!valor) return null;
-  // Si es objeto Date de JavaScript
   if (valor instanceof Date) return valor.getFullYear();
   const s = String(valor).trim();
   if (!s) return null;
   // ISO: 2026-03-15 o 2026-03-15T10:30:00
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return parseInt(s.substring(0, 4), 10);
-  // DD/MM/YYYY
+  // DD/MM/YYYY o D/M/YYYY
   if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(s)) {
-    const partes = s.split('/');
-    return parseInt(partes[2], 10);
+    return parseInt(s.split('/')[2], 10);
   }
-  // YYYY/MM/DD
-  if (/^\d{4}\/\d{2}\/\d{2}/.test(s)) return parseInt(s.substring(0, 4), 10);
-  // Fallback: busca 4 dígitos que parezcan año (2020-2099)
-  const match = s.match(/\b(20\d{2})\b/);
+  // Español KoboToolbox: "2 de jun. de 2026 9:01"
+  const matchEs = s.match(/\bde\s+(\d{4})\b/i);
+  if (matchEs) return parseInt(matchEs[1], 10);
+  // Fallback general: cualquier 20XX en el string
+  const match = s.match(/(20\d{2})/);
   if (match) return parseInt(match[1], 10);
   return null;
 }
@@ -213,10 +228,15 @@ function extraerMes(valor) {
   if (!valor) return null;
   if (valor instanceof Date) return valor.getMonth() + 1;
   const s = String(valor).trim();
+  // ISO: 2026-06-02
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return parseInt(s.substring(5, 7), 10);
-  if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(s)) {
-    const partes = s.split('/');
-    return parseInt(partes[1], 10);
+  // DD/MM/YYYY
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(s)) return parseInt(s.split('/')[1], 10);
+  // Español KoboToolbox: "2 de jun. de 2026" → busca nombre de mes
+  const matchEs = s.match(/\b(\w+?)\.?\s+de\s+\d{4}/i);
+  if (matchEs) {
+    const mesNombre = matchEs[1].toLowerCase();
+    if (MESES_NUM[mesNombre]) return MESES_NUM[mesNombre];
   }
   return null;
 }
@@ -402,11 +422,15 @@ function importarDesdeKobo() {
       );
     }
 
-    // 4. Filtrar solo AÑO_FILTRO
+    // 4. Filtrar solo AÑO_FILTRO — busca el año como texto en cualquier campo de fecha
+    const añoStr = String(AÑO_FILTRO);
     const filasFiltradas = filas.filter(f => {
-      const añoFecha = extraerAño(f[COL.FECHA]);
-      const añoSub   = extraerAño(f[COL.SUBMISSION_TIME]);
-      return añoFecha === AÑO_FILTRO || añoSub === AÑO_FILTRO;
+      const fecha   = String(f[COL.FECHA]           || '');
+      const subTime = String(f[COL.SUBMISSION_TIME] || '');
+      // Busca "2026" como substring — funciona con cualquier formato de fecha
+      if (fecha.includes(añoStr) || subTime.includes(añoStr)) return true;
+      // Fallback: busca en todos los campos de la fila
+      return Object.values(f).some(v => String(v || '').includes(añoStr));
     });
     escribirLog('Registros del año ' + AÑO_FILTRO + ': ' + filasFiltradas.length, 'INFO');
 
