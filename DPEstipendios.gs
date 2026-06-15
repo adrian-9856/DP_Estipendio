@@ -199,6 +199,73 @@ function fmtQ(numero) {
   });
 }
 
+// Diccionario de correcciones para valores con codificación de acentos
+const CORRECCIONES_TEXTO = {
+  'pr cticas':         'Prácticas',
+  'practicas':         'Prácticas',
+  'pr_cticas':         'Prácticas',
+  'tecnolog a':        'Tecnología',
+  'tecnologia':        'Tecnología',
+  'tecnolog_a':        'Tecnología',
+  'tramites':          'Trámites',
+  'tr mites':          'Trámites',
+  'panader a':         'Panadería',
+  'panaderia':         'Panadería',
+  'telef nica':        'Telefónica',
+  'construcci n':      'Construcción',
+  'construccion':      'Construcción',
+  'administraci n':    'Administración',
+  'administracion':    'Administración',
+  'comunicaci n':      'Comunicación',
+  'comunicacion':      'Comunicación',
+  'producci n':        'Producción',
+  'produccion':        'Producción',
+  'informaci n':       'Información',
+  'informacion':       'Información',
+};
+
+/**
+ * Normaliza un texto de KoboToolbox:
+ * reemplaza guiones bajos con espacios, aplica Title Case
+ * y corrige acentos usando el diccionario.
+ */
+function normalizarTexto(valor) {
+  if (!valor) return '';
+  // Reemplazar guiones bajos por espacios
+  let s = String(valor).replace(/_/g, ' ').trim();
+  // Title Case
+  s = s.replace(/\b\w/g, c => c.toUpperCase());
+  // Revisar diccionario (en minúsculas)
+  const clave = s.toLowerCase();
+  if (CORRECCIONES_TEXTO[clave]) return CORRECCIONES_TEXTO[clave];
+  // Revisar parciales: si alguna clave del diccionario es igual al texto sin acentos
+  for (const [k, v] of Object.entries(CORRECCIONES_TEXTO)) {
+    if (clave === k) return v;
+  }
+  return s;
+}
+
+/**
+ * Convierte una fecha ISO (2026-04-17T16:00:00.000-06:00) a DD/MM/YYYY.
+ * Si ya tiene otro formato limpio, la devuelve tal cual.
+ */
+function normalizarFecha(valor) {
+  if (!valor) return '';
+  const s = String(valor).trim();
+  // ISO con T: 2026-04-17T16:00:00...
+  const matchISO = s.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+  if (matchISO) {
+    return matchISO[3] + '/' + matchISO[2] + '/' + matchISO[1];
+  }
+  // ISO sin T: 2026-04-17
+  const matchDate = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (matchDate) {
+    return matchDate[3] + '/' + matchDate[2] + '/' + matchDate[1];
+  }
+  // Ya está en DD/MM/YYYY → dejar igual
+  return s;
+}
+
 /** Convierte un string de monto a número (limpia Q, comas, espacios). */
 function parseMonto(valor) {
   if (!valor) return 0;
@@ -535,9 +602,18 @@ function importarDesdeKobo() {
     const hojaDatos = obtenerOCrearHoja(HOJAS.DATOS);
     _asegurarEncabezadosDatos(hojaDatos);
 
-    const matrizNueva = filasNuevas.map(f =>
-      HEADERS_DATOS.map(col => f[col] || '')
-    );
+    const matrizNueva = filasNuevas.map(f => {
+      // Normalizar campos antes de guardar
+      const fila = {};
+      Object.keys(f).forEach(k => { fila[k] = f[k]; });
+      fila[COL.PROYECTO]  = normalizarTexto(f[COL.PROYECTO]);
+      fila[COL.FASE]      = normalizarTexto(f[COL.FASE]);
+      fila[COL.FECHA]     = normalizarFecha(f[COL.FECHA]);
+      fila[COL.ESPECIALIDAD]     = normalizarTexto(f[COL.ESPECIALIDAD]);
+      fila[COL.MOTIVO_DESCUENTO] = normalizarTexto(f[COL.MOTIVO_DESCUENTO]);
+      fila[COL.INCENTIVO]        = normalizarTexto(f[COL.INCENTIVO]);
+      return HEADERS_DATOS.map(col => fila[col] || '');
+    });
 
     const primerFilaVacia = hojaDatos.getLastRow() + 1;
     hojaDatos.getRange(primerFilaVacia, 1, matrizNueva.length, HEADERS_DATOS.length)
