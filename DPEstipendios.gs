@@ -186,25 +186,38 @@ function parseMonto(valor) {
   return isNaN(num) ? 0 : num;
 }
 
-/** Extrae el año de un string de fecha ISO o DD/MM/YYYY. */
+/** Extrae el año de un string de fecha en cualquier formato. */
 function extraerAño(valor) {
   if (!valor) return null;
+  // Si es objeto Date de JavaScript
+  if (valor instanceof Date) return valor.getFullYear();
   const s = String(valor).trim();
-  // ISO: 2026-03-15T...
+  if (!s) return null;
+  // ISO: 2026-03-15 o 2026-03-15T10:30:00
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return parseInt(s.substring(0, 4), 10);
   // DD/MM/YYYY
-  if (/^\d{2}\/\d{2}\/\d{4}/.test(s)) return parseInt(s.substring(6, 10), 10);
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(s)) {
+    const partes = s.split('/');
+    return parseInt(partes[2], 10);
+  }
   // YYYY/MM/DD
   if (/^\d{4}\/\d{2}\/\d{2}/.test(s)) return parseInt(s.substring(0, 4), 10);
+  // Fallback: busca 4 dígitos que parezcan año (2020-2099)
+  const match = s.match(/\b(20\d{2})\b/);
+  if (match) return parseInt(match[1], 10);
   return null;
 }
 
 /** Extrae el mes (1-12) de un string de fecha. */
 function extraerMes(valor) {
   if (!valor) return null;
+  if (valor instanceof Date) return valor.getMonth() + 1;
   const s = String(valor).trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return parseInt(s.substring(5, 7), 10);
-  if (/^\d{2}\/\d{2}\/\d{4}/.test(s)) return parseInt(s.substring(3, 5), 10);
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(s)) {
+    const partes = s.split('/');
+    return parseInt(partes[1], 10);
+  }
   return null;
 }
 
@@ -378,7 +391,18 @@ function importarDesdeKobo() {
     const filas = parseCSV(csvText);
     escribirLog('CSV descargado. Registros totales: ' + filas.length, 'INFO');
 
-    // 3. Filtrar solo AÑO_FILTRO
+    // 3. Diagnóstico: muestra los primeros valores de fecha encontrados
+    if (filas.length > 0) {
+      const ejemploFecha = filas[0][COL.FECHA]           || '(vacío)';
+      const ejemploSub   = filas[0][COL.SUBMISSION_TIME] || '(vacío)';
+      escribirLog(
+        'Formato de fechas detectado — Fecha: "' + ejemploFecha +
+        '" | _submission_time: "' + ejemploSub + '"',
+        'INFO'
+      );
+    }
+
+    // 4. Filtrar solo AÑO_FILTRO
     const filasFiltradas = filas.filter(f => {
       const añoFecha = extraerAño(f[COL.FECHA]);
       const añoSub   = extraerAño(f[COL.SUBMISSION_TIME]);
@@ -387,17 +411,22 @@ function importarDesdeKobo() {
     escribirLog('Registros del año ' + AÑO_FILTRO + ': ' + filasFiltradas.length, 'INFO');
 
     if (filasFiltradas.length === 0) {
-      escribirLog('No hay registros del año ' + AÑO_FILTRO + '.', 'INFO');
-      ui.alert('Sin datos',
-        'No se encontraron registros del año ' + AÑO_FILTRO + ' en KoboToolbox.',
+      // Muestra muestra de fechas para diagnóstico
+      const muestras = filas.slice(0, 3).map(f =>
+        'Fecha="' + (f[COL.FECHA] || '') + '" sub_time="' + (f[COL.SUBMISSION_TIME] || '') + '"'
+      ).join(' | ');
+      escribirLog('Sin registros 2026. Muestra de fechas: ' + muestras, 'ERROR');
+      ui.alert('Sin datos del año ' + AÑO_FILTRO,
+        'No se encontraron registros del año ' + AÑO_FILTRO + '.\n\n' +
+        'Revisa la hoja LOG para ver el formato de fechas que llegó de KoboToolbox.',
         ui.ButtonSet.OK);
       return;
     }
 
-    // 4. Obtener UUIDs ya importados
+    // 5. Obtener UUIDs ya importados
     const uuidsExistentes = _obtenerUUIDsExistentes();
 
-    // 5. Filtrar duplicados
+    // 6. Filtrar duplicados
     const filasNuevas = filasFiltradas.filter(f => {
       const uuid = (f[COL.UUID] || '').trim();
       return uuid && !uuidsExistentes.has(uuid);
