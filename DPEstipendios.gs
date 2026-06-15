@@ -737,12 +737,15 @@ function _leerDatos() {
   const hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJAS.DATOS);
   if (!hoja || hoja.getLastRow() < 2) return [];
 
-  const headers = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
-  const filas   = hoja.getRange(2, 1, hoja.getLastRow() - 1, hoja.getLastColumn()).getValues();
+  const numCols = Math.min(hoja.getLastColumn(), HEADERS_DATOS.length);
+  const filas   = hoja.getRange(2, 1, hoja.getLastRow() - 1, numCols).getValues();
 
+  // Usa HEADERS_DATOS (nombres reales del CSV) como claves — ignora los encabezados visuales del sheet
   return filas.map(fila => {
     const obj = {};
-    headers.forEach((h, i) => { obj[h] = fila[i]; });
+    HEADERS_DATOS.forEach((col, i) => {
+      obj[col] = fila[i] !== undefined ? String(fila[i]) : '';
+    });
     return obj;
   });
 }
@@ -1253,11 +1256,23 @@ function actualizarResumenPresupuesto() {
   const hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJAS.PRESUPUESTO);
   if (!hoja || hoja.getLastRow() < 4) return;
 
+  // Borrar filas de totales anteriores (evita duplicados)
+  // Busca y borra cualquier fila que diga "TOTAL GENERAL" desde la fila 4 en adelante
+  const totalFilas = hoja.getLastRow();
+  for (let f = totalFilas; f >= 4; f--) {
+    const val = String(hoja.getRange(f, 2).getValue()).trim();
+    if (val === 'TOTAL GENERAL' || val === '') {
+      hoja.deleteRow(f);
+    } else {
+      break; // Parar al encontrar una fila con datos reales
+    }
+  }
+
   // Calcular gastos reales desde DATOS
   const datos    = _leerDatos();
   const gastosPorProyecto = _calcularGastosPorProyecto(datos);
 
-  // Leer presupuesto asignado (fila 4 en adelante, columna B=proyecto, D=asignado)
+  // Leer presupuesto asignado (fila 4 en adelante)
   const ultimaFila = hoja.getLastRow();
   if (ultimaFila < 4) return;
 
