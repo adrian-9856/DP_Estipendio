@@ -89,14 +89,6 @@ const COL_RAW = {
   TECH_INCENTIVO:   'group_tech/Incentivo_tech',
   TECH_FIRMA:       'group_tech/Firma_tech',
 
-  // Grupo Empleabilidad
-  EMP_CREAMOS_ID:   'group_empleabilidad/Creamos_ID_emp',
-  EMP_NOMBRE:       'group_empleabilidad/Nombre_s',
-  EMP_APELLIDO:     'group_empleabilidad/Apellido_s',
-  EMP_FASE:         'group_empleabilidad/Fase_emp',
-  EMP_MONTO_BASE:   'group_empleabilidad/Monto_base_emp',
-  EMP_COMENTARIOS:  'group_empleabilidad/Comentarios_emp',
-  EMP_FIRMA:        'group_empleabilidad/Firma_emp',
 };
 
 // Columnas NORMALIZADAS en la hoja DATOS (esquema unificado sin importar el proyecto)
@@ -380,26 +372,10 @@ function normalizarRegistroKobo(raw) {
     incentivo   = normalizarTexto(raw[COL_RAW.TECH_INCENTIVO] || '');
     firma       = raw[COL_RAW.TECH_FIRMA]         || '';
 
-  } else if (proy.includes('emplea')) {
-    // ── Empleabilidad (campos de texto libre) ──
-    creamos_id  = raw[COL_RAW.EMP_CREAMOS_ID]   || '';
-    nombre      = raw[COL_RAW.EMP_NOMBRE]        || '';
-    apellido    = raw[COL_RAW.EMP_APELLIDO]      || '';
-    fase        = normalizarTexto(raw[COL_RAW.EMP_FASE] || '');
-    monto_base  = raw[COL_RAW.EMP_MONTO_BASE]   || '';
-    descuento   = '0';
-    monto_total = monto_base;
-    motivo      = '';
-    incentivo   = '';
-    comentarios = raw[COL_RAW.EMP_COMENTARIOS]  || '';
-    firma       = raw[COL_RAW.EMP_FIRMA]        || '';
-
   } else {
-    // Proyecto desconocido — intentar extraer lo que haya
-    creamos_id = raw['Creamos_ID'] || raw['group_empleabilidad/Creamos_ID_emp'] || '';
-    nombre     = raw['group_empleabilidad/Nombre_s'] || '';
-    apellido   = raw['group_empleabilidad/Apellido_s'] || '';
-    fase       = '';
+    // Proyecto no reconocido — registrar en LOG pero no descartar
+    nombre  = raw[COL_RAW.AB_PARTICIPANTE] || raw[COL_RAW.TECH_PARTICIPANTE] || '';
+    fase    = '';
   }
 
   return {
@@ -538,23 +514,42 @@ function ajustarColumnas(hoja, desde, hasta, maximo) {
 // MENÚ PRINCIPAL Y TRIGGERS
 // ============================================================
 
-/** Se ejecuta automáticamente al abrir el spreadsheet. */
+/**
+ * Se ejecuta automáticamente al abrir el spreadsheet.
+ * IMPORTANTE: No correr desde el editor con el botón Run — solo funciona
+ * al abrir el Google Sheets directamente.
+ */
 function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('DP Estipendios')
-    .addItem('⬇️ Importar datos desde KoboToolbox', 'importarDesdeKobo')
-    .addItem('🔄 Reimportar TODO (borra y recarga)', 'reimportarTodo')
-    .addSeparator()
-    .addItem('🏫 Importar Cohortes desde proyectos', 'importarCohortes')
-    .addSeparator()
-    .addItem('📊 Actualizar Dashboard', 'actualizarDashboard')
-    .addItem('👥 Actualizar Cohortes', 'actualizarCohortes')
-    .addItem('💰 Actualizar Presupuesto', 'actualizarResumenPresupuesto')
-    .addSeparator()
-    .addItem('⚙️ Configurar estructura inicial', 'configurarEstructuraInicial')
-    .addItem('⏰ Activar importación automática diaria', 'activarTriggerDiario')
-    .addItem('🚫 Desactivar importación automática', 'desactivarTriggerDiario')
-    .addToUi();
+  try {
+    SpreadsheetApp.getUi()
+      .createMenu('DP Estipendios')
+      .addItem('⬇️ Importar datos nuevos de KoboToolbox', 'importarDesdeKobo')
+      .addItem('🔄 Reimportar TODO (borra y recarga)', 'reimportarTodo')
+      .addSeparator()
+      .addItem('🏫 Importar Cohortes desde proyectos', 'importarCohortes')
+      .addSeparator()
+      .addItem('📊 Actualizar Dashboard', 'actualizarDashboard')
+      .addItem('👥 Actualizar vista de Cohortes', 'actualizarCohortes')
+      .addItem('💰 Actualizar Presupuesto', 'actualizarResumenPresupuesto')
+      .addSeparator()
+      .addItem('⚙️ Configurar estructura inicial', 'configurarEstructuraInicial')
+      .addItem('⏰ Activar importación automática diaria', 'activarTriggerDiario')
+      .addItem('🚫 Desactivar importación automática', 'desactivarTriggerDiario')
+      .addToUi();
+  } catch (e) {
+    // Silencioso — ocurre al ejecutar desde el editor, no desde el spreadsheet
+  }
+}
+
+/**
+ * Función para ejecutar desde el editor (botón Run).
+ * Actualiza las vistas sin hacer llamadas externas.
+ */
+function actualizarVistas() {
+  actualizarDashboard();
+  actualizarCohortes();
+  actualizarResumenPresupuesto();
+  escribirLog('Vistas actualizadas manualmente.', 'OK');
 }
 
 /**
@@ -1155,7 +1150,9 @@ function actualizarCohortes() {
     return;
   }
 
-  const cohortes = _agruparPorCohorte(datos);
+  // Cargar cohortes de referencia para cruzar presupuesto
+  const cohortesRef = _leerCohortesRef();
+  const cohortes    = _agruparPorCohorte(datos, cohortesRef);
   _escribirVistaCohortes(hoja, cohortes);
 
   hoja.setColumnWidth(1, 20);
@@ -1169,44 +1166,75 @@ function actualizarCohortes() {
   hoja.setColumnWidth(9, 20);
 }
 
-function _agruparPorCohorte(datos) {
+/** Lee la hoja COHORTES_REF y devuelve un mapa {nombreCohorte: {presupuesto, estado}}. */
+function _leerCohortesRef() {
+  const mapa = {};
+  const hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJAS.COHORTES_REF);
+  if (!hoja || hoja.getLastRow() < 3) return mapa;
+
+  // Encabezados en fila 2, datos desde fila 3
+  const headers = hoja.getRange(2, 2, 1, hoja.getLastColumn() - 1).getValues()[0];
+  const filas   = hoja.getRange(3, 2, hoja.getLastRow() - 2, headers.length).getValues();
+
+  filas.forEach(fila => {
+    const obj = {};
+    headers.forEach((h, i) => { obj[String(h).trim()] = fila[i]; });
+    const nombre = String(obj['Nombre Cohorte'] || '').trim();
+    if (nombre) {
+      mapa[nombre.toLowerCase()] = {
+        nombre:      nombre,
+        proyecto:    String(obj['Fuente'] || obj['Proyecto'] || '').trim(),
+        estado:      String(obj['Estado'] || '').trim(),
+        presupuesto: parseMonto(obj['Presupuesto Total (Q)']),
+      };
+    }
+  });
+  return mapa;
+}
+
+function _agruparPorCohorte(datos, cohortesRef) {
+  const ref      = cohortesRef || {};
   const cohortes = {};
 
   datos.forEach(d => {
     const proyecto = (d[COL.PROYECTO] || 'Sin proyecto').trim();
-    const fase     = (d[COL.FASE]     || 'Sin fase').trim();
+    const fase     = (d[COL.FASE]     || 'Sin cohorte').trim();
     const clave    = proyecto + '||' + fase;
 
     if (!cohortes[clave]) {
+      // Buscar en referencia por nombre de cohorte (sin importar mayúsculas)
+      const refInfo    = ref[fase.toLowerCase()] || null;
+      const registrada = refInfo !== null;
+
       cohortes[clave] = {
         proyecto,
         fase,
         participantes: [],
         totalMonto: 0,
-        totalHoras: 0,
-        registros: 0,
+        registros:  0,
+        registrada,
+        presupuesto: refInfo ? refInfo.presupuesto : 0,
+        estadoRef:   refInfo ? refInfo.estado       : '',
       };
     }
 
     const c      = cohortes[clave];
     const nombre = ((d[COL.NOMBRE] || '') + ' ' + (d[COL.APELLIDO] || '')).trim();
     const monto  = parseMonto(d[COL.MONTO_TOTAL]);
-    const horas  = parseFloat(d[COL.TOTAL_HORAS]) || 0;
 
     c.totalMonto += monto;
-    c.totalHoras += horas;
     c.registros  += 1;
 
     c.participantes.push({
-      creamos_id:  d[COL.CREAMOS_ID]  || '',
+      creamos_id:       d[COL.CREAMOS_ID]       || '',
       nombre,
-      fecha:       d[COL.FECHA]       || '',
-      especialidad: d[COL.ESPECIALIDAD] || '',
-      incentivo:   d[COL.INCENTIVO]   || '',
-      horas,
+      fecha:            d[COL.FECHA]            || '',
+      monto_base:       d[COL.MONTO_BASE]       || '',
+      descuento:        d[COL.DESCUENTO]        || '0',
       monto,
       motivo_descuento: d[COL.MOTIVO_DESCUENTO] || '',
-      comentarios: d[COL.COMENTARIOS] || '',
+      incentivo:        d[COL.INCENTIVO]        || '',
+      comentarios:      d[COL.COMENTARIOS]      || '',
     });
   });
 
@@ -1253,23 +1281,40 @@ function _escribirVistaCohortes(hoja, cohortes) {
 function _escribirEncabezadoCohorte(hoja, fila, coh, idx) {
   const colorFondo = idx % 2 === 0 ? COLORES.PRIMARIO : COLORES.SECUNDARIO;
 
-  const rProyecto = hoja.getRange(fila, 2, 1, 4);
+  // Fila 1: Proyecto + estado de cohorte
+  const labelCohorte = coh.registrada
+    ? '✅ ' + coh.fase + (coh.estadoRef ? '  [' + coh.estadoRef + ']' : '')
+    : '⚠️ ' + coh.fase + '  — cohorte no registrada en COHORTES_REF';
+
+  const rProyecto = hoja.getRange(fila, 2, 1, 7);
   rProyecto.merge();
-  rProyecto.setValue('PROYECTO: ' + coh.proyecto.toUpperCase());
+  rProyecto.setValue('PROYECTO: ' + coh.proyecto.toUpperCase() + '   |   ' + labelCohorte);
   rProyecto.setBackground(colorFondo);
   rProyecto.setFontColor('#FFFFFF');
   rProyecto.setFontWeight('bold');
-  rProyecto.setFontSize(11);
+  rProyecto.setFontSize(10);
   hoja.setRowHeight(fila, 26);
   fila++;
 
-  const rFase = hoja.getRange(fila, 2, 1, 4);
+  // Fila 2: métricas + presupuesto
+  const saldo       = coh.presupuesto - coh.totalMonto;
+  const pct         = coh.presupuesto > 0
+    ? ((coh.totalMonto / coh.presupuesto) * 100).toFixed(1) + '%'
+    : '—';
+  const presupInfo  = coh.registrada
+    ? '  |  Presupuesto: ' + fmtQ(coh.presupuesto) +
+      '  Gastado: ' + fmtQ(coh.totalMonto) +
+      '  Saldo: ' + fmtQ(saldo) +
+      '  (' + pct + ')'
+    : '  |  Sin presupuesto registrado';
+
+  const rFase = hoja.getRange(fila, 2, 1, 7);
   rFase.merge();
-  rFase.setValue('Fase: ' + coh.fase + '   |   ' +
-    coh.registros + ' registros   |   ' +
-    fmtQ(coh.totalMonto) + '   |   ' +
-    coh.totalHoras.toFixed(1) + ' horas');
-  rFase.setBackground(COLORES.ACENTO);
+  rFase.setValue(coh.registros + ' estipendios' + presupInfo);
+  const colorFila2 = coh.registrada
+    ? (saldo >= 0 ? '#1A5276' : COLORES.ROJO)
+    : '#7D6608';
+  rFase.setBackground(colorFila2);
   rFase.setFontColor('#FFFFFF');
   rFase.setFontWeight('bold');
   hoja.setRowHeight(fila, 22);
@@ -1280,8 +1325,8 @@ function _escribirEncabezadoCohorte(hoja, fila, coh, idx) {
 
 function _escribirEncabezadosParticipantes(hoja, fila) {
   const cols = [
-    'Creamos ID', 'Participante', 'Fecha', 'Especialidad',
-    'Incentivo', 'Horas', 'Monto', 'Observaciones',
+    'Creamos ID', 'Participante', 'Fecha',
+    'Monto Base', 'Descuento', 'Monto Total', 'Motivo / Incentivo',
   ];
   const r = hoja.getRange(fila, 2, 1, cols.length);
   r.setValues([cols]);
@@ -1295,15 +1340,16 @@ function _escribirEncabezadosParticipantes(hoja, fila) {
 }
 
 function _escribirFilaParticipante(hoja, fila, p, pIdx) {
+  const motivoInfo = [p.motivo_descuento, p.incentivo, p.comentarios]
+    .filter(v => v).join(' / ');
   const valores = [
     p.creamos_id,
     p.nombre,
     p.fecha,
-    p.especialidad,
-    p.incentivo,
-    p.horas || '',
+    p.monto_base ? fmtQ(parseMonto(p.monto_base)) : '—',
+    p.descuento && p.descuento !== '0' ? fmtQ(parseMonto(p.descuento)) : '—',
     fmtQ(p.monto),
-    p.motivo_descuento || p.comentarios,
+    motivoInfo,
   ];
   const r = hoja.getRange(fila, 2, 1, valores.length);
   r.setValues([valores]);
@@ -1314,14 +1360,15 @@ function _escribirFilaParticipante(hoja, fila, p, pIdx) {
 }
 
 function _escribirSubtotalCohorte(hoja, fila, coh) {
-  const r = hoja.getRange(fila, 2, 1, 8);
+  const saldo = coh.presupuesto - coh.totalMonto;
+  const r = hoja.getRange(fila, 2, 1, 7);
   r.setValues([[
     '', 'SUBTOTAL',
-    '', '',
     '',
-    coh.totalHoras.toFixed(1),
+    '',
+    '',
     fmtQ(coh.totalMonto),
-    coh.registros + ' registros',
+    coh.registros + ' estipendios' + (coh.registrada ? '  |  Saldo: ' + fmtQ(saldo) : ''),
   ]]);
   r.setBackground(COLORES.FONDO_CARD);
   r.setFontWeight('bold');
