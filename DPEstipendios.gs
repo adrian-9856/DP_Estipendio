@@ -1513,8 +1513,12 @@ function importarCohortes() {
     FUENTES_COHORTES.forEach(fuente => {
       try {
         const filas = _leerSheetExterno(fuente.id, fuente.hoja);
-        escribirLog('Leídas ' + filas.length + ' cohortes de "' + fuente.proyecto + '"', 'INFO');
-        filas.forEach(f => {
+        // Solo incluir filas que tengan Nombre Cohorte no vacío
+        const validas = filas.filter(f =>
+          String(f[COL_COHORTE.NOMBRE] || '').trim() !== ''
+        );
+        escribirLog('Cohortes de "' + fuente.proyecto + '": ' + validas.length + ' válidas de ' + filas.length + ' leídas', 'INFO');
+        validas.forEach(f => {
           todasLasCohortes.push({ ...f, _fuente: fuente.proyecto });
         });
       } catch (e) {
