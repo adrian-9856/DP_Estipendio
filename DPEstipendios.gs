@@ -535,9 +535,125 @@ function onOpen() {
       .addItem('⚙️ Configurar estructura inicial', 'configurarEstructuraInicial')
       .addItem('⏰ Activar importación automática diaria', 'activarTriggerDiario')
       .addItem('🚫 Desactivar importación automática', 'desactivarTriggerDiario')
+      .addSeparator()
+      .addItem('🗑️ REINSTALAR TODO DESDE CERO', 'reinstalarTodo')
       .addToUi();
   } catch (e) {
     // Silencioso — ocurre al ejecutar desde el editor, no desde el spreadsheet
+  }
+}
+
+/**
+ * Reinstala el sistema completo desde cero.
+ * Borra todas las hojas del sistema, las recrea con estructura limpia,
+ * reactiva el trigger diario y muestra los pasos a seguir.
+ */
+function reinstalarTodo() {
+  const ui = SpreadsheetApp.getUi();
+
+  const confirm1 = ui.alert(
+    '⚠️ REINSTALAR TODO',
+    'Esto BORRARÁ todas las hojas del sistema (DATOS, DASHBOARD, COHORTES, ' +
+    'COHORTES_REF, PRESUPUESTO, LOG) y las recreará vacías.\n\n' +
+    '¿Deseas continuar?',
+    ui.ButtonSet.YES_NO
+  );
+  if (confirm1 !== ui.Button.YES) return;
+
+  const confirm2 = ui.alert(
+    '⚠️ Confirmación final',
+    'Se perderán TODOS los datos importados. ¿Estás seguro?',
+    ui.ButtonSet.YES_NO
+  );
+  if (confirm2 !== ui.Button.YES) return;
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // 1. Borrar hojas del sistema
+    const hojasABorrar = Object.values(HOJAS);
+    hojasABorrar.forEach(nombre => {
+      const h = ss.getSheetByName(nombre);
+      if (h) {
+        // No se puede borrar la última hoja — primero crea una temporal si hace falta
+        if (ss.getSheets().length === 1) {
+          ss.insertSheet('_temp_');
+        }
+        ss.deleteSheet(h);
+      }
+    });
+
+    // 2. Borrar hoja temporal si existe
+    const temp = ss.getSheetByName('_temp_');
+    if (temp && ss.getSheets().length > 1) ss.deleteSheet(temp);
+
+    // 3. Crear todas las hojas en orden correcto
+    const ordenHojas = [
+      HOJAS.DASHBOARD, HOJAS.COHORTES, HOJAS.COHORTES_REF,
+      HOJAS.PRESUPUESTO, HOJAS.DATOS, HOJAS.LOG,
+    ];
+    ordenHojas.reverse().forEach(nombre => {
+      const h = ss.insertSheet(nombre, 0);
+      Utilities.sleep(100);
+    });
+
+    // 4. Inicializar estructura de cada hoja
+
+    // DATOS
+    const hojaDatos = ss.getSheetByName(HOJAS.DATOS);
+    escribirEncabezados(hojaDatos, HEADERS_DISPLAY, COLORES.PRIMARIO);
+    hojaDatos.setFrozenRows(1);
+
+    // LOG
+    const hojaLog = ss.getSheetByName(HOJAS.LOG);
+    escribirEncabezados(hojaLog, ['Fecha y Hora', 'Tipo', 'Mensaje', 'Detalles'], COLORES.PRIMARIO);
+
+    // PRESUPUESTO (estructura inicial)
+    inicializarHojaPresupuesto();
+
+    // DASHBOARD placeholder
+    const hojaDash = ss.getSheetByName(HOJAS.DASHBOARD);
+    const rTit = hojaDash.getRange('B2:F2');
+    rTit.merge();
+    rTit.setValue('DASHBOARD — Ejecuta "Importar datos" para ver métricas');
+    rTit.setBackground(COLORES.PRIMARIO);
+    rTit.setFontColor('#FFFFFF');
+    rTit.setFontSize(12);
+    rTit.setHorizontalAlignment('center');
+
+    // COHORTES placeholder
+    const hojaCoh = ss.getSheetByName(HOJAS.COHORTES);
+    hojaCoh.getRange('B2').setValue('Sin datos — importa desde KoboToolbox primero.');
+
+    // COHORTES_REF placeholder
+    const hojaRef = ss.getSheetByName(HOJAS.COHORTES_REF);
+    hojaRef.getRange('B2').setValue('Sin cohortes — ejecuta "Importar Cohortes desde proyectos".');
+
+    // 5. Desactivar triggers viejos y activar uno nuevo
+    desactivarTriggerDiario();
+    ScriptApp.newTrigger('importarDesdeKobo')
+      .timeBased()
+      .everyDays(1)
+      .atHour(6)
+      .create();
+
+    escribirLog('Sistema reinstalado correctamente.', 'OK');
+
+    // 6. Instrucciones finales
+    ui.alert(
+      '✅ Reinstalación completada',
+      'El sistema quedó limpio y listo.\n\n' +
+      'Pasos a seguir:\n' +
+      '1️⃣  Menú → 🏫 Importar Cohortes desde proyectos\n' +
+      '2️⃣  Actualiza el KOBO_URL si cambió el formulario\n' +
+      '3️⃣  Menú → ⬇️ Importar datos nuevos de KoboToolbox\n' +
+      '4️⃣  Agrega presupuestos en la hoja PRESUPUESTO\n\n' +
+      'La importación automática diaria quedó activada (6:00 AM).',
+      ui.ButtonSet.OK
+    );
+
+  } catch (e) {
+    ui.alert('Error en reinstalación', e.message, ui.ButtonSet.OK);
   }
 }
 
