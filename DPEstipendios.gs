@@ -45,12 +45,24 @@ const COL_COHORTE = {
 };
 
 const HOJAS = {
-  DATOS:         'DATOS',
+  INICIO:        'INICIO',
   DASHBOARD:     'DASHBOARD',
   COHORTES:      'COHORTES',
   COHORTES_REF:  'COHORTES_REF',
   PRESUPUESTO:   'PRESUPUESTO',
+  DATOS:         'DATOS',
   LOG:           'LOG',
+};
+
+// Color de cada pestaña
+const TAB_COLORS = {
+  INICIO:       '#FFFFFF',
+  DASHBOARD:    '#4A1C96',
+  COHORTES:     '#1565C0',
+  COHORTES_REF: '#1B5E20',
+  PRESUPUESTO:  '#E65100',
+  DATOS:        '#37474F',
+  LOG:          '#757575',
 };
 
 // Nombres de columnas en el CSV exportado del formulario v11
@@ -589,15 +601,18 @@ function reinstalarTodo() {
 
     // 3. Crear todas las hojas en orden correcto
     const ordenHojas = [
-      HOJAS.DASHBOARD, HOJAS.COHORTES, HOJAS.COHORTES_REF,
+      HOJAS.INICIO, HOJAS.DASHBOARD, HOJAS.COHORTES, HOJAS.COHORTES_REF,
       HOJAS.PRESUPUESTO, HOJAS.DATOS, HOJAS.LOG,
     ];
     ordenHojas.reverse().forEach(nombre => {
-      const h = ss.insertSheet(nombre, 0);
+      ss.insertSheet(nombre, 0);
       Utilities.sleep(100);
     });
 
     // 4. Inicializar estructura de cada hoja
+
+    // INICIO — guía visual
+    _crearHojaInicio();
 
     // DATOS
     const hojaDatos = ss.getSheetByName(HOJAS.DATOS);
@@ -628,6 +643,9 @@ function reinstalarTodo() {
     // COHORTES_REF placeholder
     const hojaRef = ss.getSheetByName(HOJAS.COHORTES_REF);
     hojaRef.getRange('B2').setValue('Sin cohortes — ejecuta "Importar Cohortes desde proyectos".');
+
+    // Aplicar colores a pestañas
+    _ordenarHojas();
 
     // 5. Desactivar triggers viejos y activar uno nuevo
     desactivarTriggerDiario();
@@ -679,10 +697,14 @@ function configurarEstructuraInicial() {
     // Asegura que existan todas las hojas
     Object.values(HOJAS).forEach(nombre => obtenerOCrearHoja(nombre));
 
+    // Hoja INICIO — guía visual del sistema
+    _crearHojaInicio();
+
     // Inicializa DATOS con encabezados
     const hojaDatos = obtenerOCrearHoja(HOJAS.DATOS);
     if (hojaDatos.getLastRow() === 0) {
-      escribirEncabezados(hojaDatos, HEADERS_DATOS, COLORES.PRIMARIO);
+      escribirEncabezados(hojaDatos, HEADERS_DISPLAY, COLORES.PRIMARIO);
+      hojaDatos.setFrozenRows(1);
     }
 
     // Inicializa PRESUPUESTO
@@ -697,7 +719,7 @@ function configurarEstructuraInicial() {
       );
     }
 
-    // Ordena las hojas
+    // Ordena las hojas y aplica colores de pestañas
     _ordenarHojas();
 
     escribirLog('Estructura inicial configurada correctamente.', 'OK');
@@ -770,13 +792,128 @@ function reimportarTodo() {
 function _ordenarHojas() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const orden = [
-    HOJAS.DASHBOARD, HOJAS.COHORTES,
+    HOJAS.INICIO, HOJAS.DASHBOARD, HOJAS.COHORTES, HOJAS.COHORTES_REF,
     HOJAS.PRESUPUESTO, HOJAS.DATOS, HOJAS.LOG,
   ];
+
+  // Mover cada hoja a su posición correcta
   orden.forEach((nombre, idx) => {
     const hoja = ss.getSheetByName(nombre);
-    if (hoja) ss.moveActiveSheet && ss.setActiveSheet(hoja);
+    if (hoja) {
+      ss.setActiveSheet(hoja);
+      ss.moveActiveSheet(idx + 1);
+    }
   });
+
+  // Aplicar colores a las pestañas
+  Object.entries(TAB_COLORS).forEach(([key, color]) => {
+    const hoja = ss.getSheetByName(HOJAS[key]);
+    if (hoja) hoja.setTabColor(color);
+  });
+}
+
+function _crearHojaInicio() {
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
+  const h   = obtenerOCrearHoja(HOJAS.INICIO);
+  h.clearContents();
+  h.clearFormats();
+  h.setColumnWidths(1, 1, 20);   // col A: margen
+  h.setColumnWidth(2, 260);
+  h.setColumnWidth(3, 420);
+  h.setColumnWidth(4, 20);
+
+  const MORADO  = COLORES.PRIMARIO;
+  const MORADO2 = COLORES.SECUNDARIO;
+  const AMARILLO = COLORES.ACENTO;
+  const BLANCO  = '#FFFFFF';
+
+  // Título principal
+  const rTit = h.getRange('B2:C2');
+  rTit.merge();
+  rTit.setValue('📋 DP Estipendios 2026 — Guía del sistema');
+  rTit.setBackground(MORADO).setFontColor(BLANCO)
+      .setFontSize(14).setFontWeight('bold')
+      .setVerticalAlignment('middle').setHorizontalAlignment('center');
+  h.setRowHeight(2, 36);
+
+  // Subtítulo
+  const rSub = h.getRange('B3:C3');
+  rSub.merge();
+  rSub.setValue('Sistema de control de estipendios por cohorte — Creamos Guatemala');
+  rSub.setBackground(MORADO2).setFontColor(BLANCO)
+      .setFontSize(10).setHorizontalAlignment('center');
+  h.setRowHeight(3, 22);
+
+  // Encabezado tabla
+  const rHead = h.getRange('B5:C5');
+  rHead.setValues([['Hoja', '¿Qué hace?']]);
+  rHead.setBackground(AMARILLO).setFontColor(BLANCO)
+       .setFontWeight('bold').setFontSize(10)
+       .setHorizontalAlignment('center');
+  h.setRowHeight(5, 24);
+
+  // Filas de hojas
+  const filas = [
+    ['📊 DASHBOARD',    'Resumen ejecutivo: total gastado, presupuesto ejecutado, top participantes y gasto por proyecto.'],
+    ['👥 COHORTES',     'Vista agrupada por cohorte: lista de participantes, montos pagados y saldo de presupuesto.'],
+    ['📚 COHORTES_REF', 'Catálogo de cohortes importado desde los Google Sheets de cada proyecto (Alimentos y Bebidas, Tech).'],
+    ['💰 PRESUPUESTO',  'Presupuesto asignado vs. gastado por proyecto. Columna "Saldo" en verde (disponible) o rojo (excedido).'],
+    ['🗃️ DATOS',        'Datos crudos importados de KoboToolbox. No editar a mano — se actualiza con el menú DP Estipendios.'],
+    ['📝 LOG',          'Historial de importaciones, errores y operaciones del sistema. Útil para diagnóstico.'],
+  ];
+
+  filas.forEach(([nombre, desc], idx) => {
+    const fila = 6 + idx;
+    const bg   = idx % 2 === 0 ? '#F8F4FF' : BLANCO;
+    h.getRange(fila, 2).setValue(nombre)
+      .setBackground(bg).setFontWeight('bold').setFontSize(10)
+      .setVerticalAlignment('middle').setWrap(true);
+    h.getRange(fila, 3).setValue(desc)
+      .setBackground(bg).setFontSize(10)
+      .setVerticalAlignment('middle').setWrap(true);
+    h.setRowHeight(fila, 40);
+  });
+
+  // Sección flujo de trabajo
+  const rFlujo = h.getRange('B13:C13');
+  rFlujo.merge();
+  rFlujo.setValue('Flujo de trabajo recomendado');
+  rFlujo.setBackground(MORADO).setFontColor(BLANCO)
+        .setFontWeight('bold').setFontSize(11)
+        .setHorizontalAlignment('center');
+  h.setRowHeight(13, 28);
+
+  const pasos = [
+    ['1️⃣  Importar cohortes',         'Menú DP Estipendios → 🏫 Importar Cohortes desde proyectos\nJala el catálogo de cohortes de los Google Sheets de cada proyecto.'],
+    ['2️⃣  Importar estipendios',       'Menú DP Estipendios → ⬇️ Importar datos nuevos de KoboToolbox\nDescarga los registros nuevos del formulario KoboToolbox (solo 2026, sin duplicados).'],
+    ['3️⃣  Revisar Dashboard',          'Ve a la hoja DASHBOARD para ver el resumen ejecutivo actualizado.'],
+    ['4️⃣  Verificar presupuesto',      'Ve a PRESUPUESTO para ver el saldo disponible por proyecto.'],
+    ['🔄  Importación automática',      'El sistema importa automáticamente todos los días a las 6:00 AM.\nNo es necesario hacerlo a mano cada día.'],
+  ];
+
+  pasos.forEach(([paso, desc], idx) => {
+    const fila = 14 + idx;
+    const bg   = idx % 2 === 0 ? '#FFF8E1' : BLANCO;
+    h.getRange(fila, 2).setValue(paso)
+      .setBackground(bg).setFontWeight('bold').setFontSize(10)
+      .setVerticalAlignment('middle').setWrap(true);
+    h.getRange(fila, 3).setValue(desc)
+      .setBackground(bg).setFontSize(10)
+      .setVerticalAlignment('middle').setWrap(true);
+    h.setRowHeight(fila, 44);
+  });
+
+  // Nota final
+  const rNota = h.getRange('B20:C20');
+  rNota.merge();
+  rNota.setValue('⚠️ Para reinstalar el sistema desde cero: Menú DP Estipendios → 🔄 Reinstalar todo');
+  rNota.setBackground('#FFF3E0').setFontColor('#E65100')
+       .setFontSize(10).setHorizontalAlignment('center')
+       .setVerticalAlignment('middle').setWrap(true);
+  h.setRowHeight(20, 32);
+
+  // Ocultar líneas de cuadrícula para look limpio
+  h.setHiddenGridlines(true);
 }
 // ============================================================
 // IMPORTACIÓN DESDE KOBOTOOLBOX
