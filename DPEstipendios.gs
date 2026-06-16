@@ -6,12 +6,51 @@ const KOBO_URL =
   'https://kf.kobotoolbox.org/api/v2/assets/aNpJWVRoxxQ5a8pwBQVJac' +
   '/export-settings/esqLSo9A8oFvxVwZKUXwADx/data.csv';
 
+// Fuentes externas de cohortes — agrega aquí cada Google Sheet de proyecto
+const FUENTES_COHORTES = [
+  {
+    id:       '1Ay1z3HdFHTzSjq7891sQVuEpIXBA8g9XGibjI-wFklc',
+    proyecto: 'Alimentos y Bebidas',
+    hoja:     'Cohortes',
+  },
+  {
+    id:       '1En60zjrwPTrSMFrLUWr2KgXmH7y3vcopfpQgy6lY3HU',
+    proyecto: 'Tech',
+    hoja:     'Cohortes',
+  },
+];
+
+// Columnas del sheet externo de cohortes
+const COL_COHORTE = {
+  NOMBRE:        'Nombre Cohorte',
+  PROYECTO:      'Proyecto',
+  ANIO:          'Año',
+  FECHA_INICIO:  'Fecha Inicio',
+  FECHA_FIN:     'Fecha Fin',
+  RESPONSABLE:   'Responsable',
+  CUPO:          'Cupo Máximo',
+  PRE_INSCRITOS: 'Pre-Inscritxs',
+  GRADUADOS:     'Graduadx',
+  RETIRADOS:     'Retiradx',
+  UBICACION:     'Ubicación',
+  HORARIO:       'Horario',
+  NOTAS:         'Notas',
+  ESTADO:        'Estado',
+  PRESUP_CURSO:  'Presupuesto Curso (Q)',
+  PRESUP_PRACT:  'Presupuesto Prácticas (Q)',
+  PRESUP_TOTAL:  'Presupuesto Total (Q)',
+  GASTADO:       'Gastado (Q)',
+  DISPONIBLE:    'Disponible (Q)',
+  PCT_EJECUCION: '% Ejecución',
+};
+
 const HOJAS = {
-  DATOS:       'DATOS',
-  DASHBOARD:   'DASHBOARD',
-  COHORTES:    'COHORTES',
-  PRESUPUESTO: 'PRESUPUESTO',
-  LOG:         'LOG',
+  DATOS:         'DATOS',
+  DASHBOARD:     'DASHBOARD',
+  COHORTES:      'COHORTES',
+  COHORTES_REF:  'COHORTES_REF',
+  PRESUPUESTO:   'PRESUPUESTO',
+  LOG:           'LOG',
 };
 
 // Nombres reales de columnas en el CSV de KoboToolbox
@@ -384,6 +423,8 @@ function onOpen() {
     .createMenu('DP Estipendios')
     .addItem('⬇️ Importar datos desde KoboToolbox', 'importarDesdeKobo')
     .addItem('🔄 Reimportar TODO (borra y recarga)', 'reimportarTodo')
+    .addSeparator()
+    .addItem('🏫 Importar Cohortes desde proyectos', 'importarCohortes')
     .addSeparator()
     .addItem('📊 Actualizar Dashboard', 'actualizarDashboard')
     .addItem('👥 Actualizar Cohortes', 'actualizarCohortes')
@@ -1175,6 +1216,261 @@ function _escribirSubtotalCohorte(hoja, fila, coh) {
   hoja.setRowHeight(fila, 20);
   return fila + 1;
 }
+// ============================================================
+// COHORTES EXTERNAS — Importación desde Google Sheets de proyectos
+// ============================================================
+
+/**
+ * Importa cohortes desde todos los Google Sheets externos definidos en FUENTES_COHORTES.
+ * Crea/actualiza la hoja COHORTES_REF con todos los datos unificados.
+ */
+function importarCohortes() {
+  const ui = SpreadsheetApp.getUi();
+  const hoja = obtenerOCrearHoja(HOJAS.COHORTES_REF);
+
+  try {
+    escribirLog('Importando cohortes desde fuentes externas...', 'INFO');
+
+    const todasLasCohortes = [];
+
+    FUENTES_COHORTES.forEach(fuente => {
+      try {
+        const filas = _leerSheetExterno(fuente.id, fuente.hoja);
+        escribirLog('Leídas ' + filas.length + ' cohortes de "' + fuente.proyecto + '"', 'INFO');
+        filas.forEach(f => {
+          todasLasCohortes.push({ ...f, _fuente: fuente.proyecto });
+        });
+      } catch (e) {
+        escribirLog('Error leyendo "' + fuente.proyecto + '": ' + e.message, 'ERROR');
+      }
+    });
+
+    if (todasLasCohortes.length === 0) {
+      ui.alert('Sin cohortes', 'No se encontraron cohortes en las fuentes externas.\nVerifica que los IDs de spreadsheet sean correctos y que tengas acceso.', ui.ButtonSet.OK);
+      return;
+    }
+
+    // Cruzar con gastos reales de KoboToolbox
+    const datos = _leerDatos();
+    const gastosPorCohorte = _calcularGastosPorCohorte(datos);
+
+    // Escribir hoja COHORTES_REF
+    _escribirCohorteRef(hoja, todasLasCohortes, gastosPorCohorte);
+
+    // Actualizar PRESUPUESTO con los datos de cohortes
+    _sincronizarPresupuestoDesdeCohortes(todasLasCohortes, gastosPorCohorte);
+
+    escribirLog('Cohortes importadas: ' + todasLasCohortes.length, 'OK');
+    ui.alert('Cohortes importadas',
+      '✅ ' + todasLasCohortes.length + ' cohortes importadas correctamente.\n\n' +
+      'Hoja COHORTES_REF y PRESUPUESTO actualizados.',
+      ui.ButtonSet.OK);
+
+  } catch (e) {
+    escribirLog('Error importando cohortes: ' + e.message, 'ERROR', e.stack);
+    ui.alert('Error', e.message, ui.ButtonSet.OK);
+  }
+}
+
+/** Lee todas las filas de una hoja en un Google Sheet externo. */
+function _leerSheetExterno(spreadsheetId, nombreHoja) {
+  const ss    = SpreadsheetApp.openById(spreadsheetId);
+  const hoja  = ss.getSheetByName(nombreHoja);
+  if (!hoja) throw new Error('No se encontró la hoja "' + nombreHoja + '" en el spreadsheet ' + spreadsheetId);
+
+  const ultimaFila = hoja.getLastRow();
+  const ultimaCol  = hoja.getLastColumn();
+  if (ultimaFila < 2 || ultimaCol < 1) return [];
+
+  const headers = hoja.getRange(1, 1, 1, ultimaCol).getValues()[0];
+  const filas   = hoja.getRange(2, 1, ultimaFila - 1, ultimaCol).getValues();
+
+  return filas
+    .filter(fila => fila.some(v => v !== '' && v !== null))
+    .map(fila => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[String(h).trim()] = fila[i]; });
+      return obj;
+    });
+}
+
+/** Calcula el total de estipendios gastados agrupado por Proyecto+Fase (cohorte). */
+function _calcularGastosPorCohorte(datos) {
+  const gastos = {};
+  datos.forEach(d => {
+    const proyecto = (d[COL.PROYECTO] || '').trim();
+    const fase     = (d[COL.FASE]     || '').trim();
+    const clave    = proyecto + '||' + fase;
+    const monto    = parseMonto(d[COL.MONTO_TOTAL]);
+    if (!gastos[clave]) gastos[clave] = { total: 0, count: 0 };
+    gastos[clave].total += monto;
+    gastos[clave].count += 1;
+  });
+  return gastos;
+}
+
+/** Escribe la hoja COHORTES_REF con todos los datos cruzados. */
+function _escribirCohorteRef(hoja, cohortes, gastosPorCohorte) {
+  hoja.clearContents();
+  hoja.clearFormats();
+
+  // Título
+  const rTit = hoja.getRange('B1:M1');
+  rTit.merge();
+  rTit.setValue('REFERENCIA DE COHORTES — TODAS LAS FUENTES');
+  rTit.setBackground(COLORES.PRIMARIO);
+  rTit.setFontColor('#FFFFFF');
+  rTit.setFontSize(13);
+  rTit.setFontWeight('bold');
+  rTit.setHorizontalAlignment('center');
+  hoja.setRowHeight(1, 40);
+
+  // Encabezados
+  const encabezados = [
+    'Fuente', 'Nombre Cohorte', 'Proyecto', 'Año', 'Estado',
+    'Cupo', 'Pre-Inscritos', 'Graduados', 'Retirados',
+    'Presupuesto Total (Q)', 'Estipendios Gastados (Q)', 'Saldo Estipendios (Q)',
+  ];
+  const rEnc = hoja.getRange(2, 2, 1, encabezados.length);
+  rEnc.setValues([encabezados]);
+  rEnc.setBackground(COLORES.SECUNDARIO);
+  rEnc.setFontColor('#FFFFFF');
+  rEnc.setFontWeight('bold');
+  rEnc.setFontSize(9);
+  hoja.setFrozenRows(2);
+
+  // Filas de datos
+  let nuevasCohortes = 0;
+  cohortes.forEach((c, idx) => {
+    const fila = idx + 3;
+    const nombreCohorte = String(c[COL_COHORTE.NOMBRE]   || '').trim();
+    const proyecto      = String(c[COL_COHORTE.PROYECTO] || c._fuente || '').trim();
+    const fase          = nombreCohorte; // La "fase" en Kobo equivale al nombre de cohorte
+
+    // Buscar gastos: intentar match exacto primero, luego parcial
+    const claveExacta = proyecto + '||' + fase;
+    let gastadoEstip  = (gastosPorCohorte[claveExacta] || {}).total || 0;
+
+    // Si no hay match exacto, buscar por nombre parcial
+    if (gastadoEstip === 0) {
+      Object.entries(gastosPorCohorte).forEach(([k, v]) => {
+        const [p, f] = k.split('||');
+        if (_textoSimilar(proyecto, p) || _textoSimilar(nombreCohorte, f)) {
+          gastadoEstip += v.total;
+        }
+      });
+    }
+
+    const presupTotal = parseMonto(c[COL_COHORTE.PRESUP_TOTAL]) ||
+                        parseMonto(c[COL_COHORTE.PRESUP_PRACT]);
+    const saldoEstip  = presupTotal - gastadoEstip;
+
+    const estado = String(c[COL_COHORTE.ESTADO] || '').trim();
+    const esNueva = estado.toLowerCase().includes('activ') ||
+                    estado.toLowerCase().includes('en curso');
+    if (esNueva) nuevasCohortes++;
+
+    const valores = [
+      c._fuente,
+      nombreCohorte,
+      proyecto,
+      c[COL_COHORTE.ANIO]         || '',
+      estado,
+      c[COL_COHORTE.CUPO]         || '',
+      c[COL_COHORTE.PRE_INSCRITOS]|| '',
+      c[COL_COHORTE.GRADUADOS]    || '',
+      c[COL_COHORTE.RETIRADOS]    || '',
+      presupTotal,
+      gastadoEstip,
+      saldoEstip,
+    ];
+
+    hoja.getRange(fila, 2, 1, valores.length).setValues([valores]);
+
+    // Color por estado
+    const bg = esNueva
+      ? '#E8F5E9'
+      : (idx % 2 === 0 ? COLORES.FONDO_CARD : '#FFFFFF');
+    hoja.getRange(fila, 2, 1, valores.length).setBackground(bg);
+
+    // Color saldo
+    const colorSaldo = saldoEstip >= 0 ? COLORES.VERDE : COLORES.ROJO;
+    hoja.getRange(fila, 13).setFontColor(colorSaldo).setFontWeight('bold');
+
+    hoja.setRowHeight(fila, 20);
+  });
+
+  // Nota de cohortes activas
+  const filaInfo = cohortes.length + 4;
+  hoja.getRange(filaInfo, 2, 1, 5).merge()
+    .setValue('✅ Cohortes activas: ' + nuevasCohortes + '  |  Total: ' + cohortes.length +
+              '  |  Actualizado: ' + Utilities.formatDate(new Date(), 'America/Guatemala', 'dd/MM/yyyy HH:mm'))
+    .setFontColor('#555555').setFontSize(9);
+
+  // Anchos de columna
+  hoja.setColumnWidth(1, 20);
+  [2,3,4,5,6,7,8,9,10,11,12,13].forEach((c, i) => {
+    hoja.setColumnWidth(c, [120,200,160,50,80,60,60,60,60,130,140,130][i]);
+  });
+}
+
+/**
+ * Sincroniza la hoja PRESUPUESTO usando los datos de cohortes externas.
+ * Crea o actualiza una fila por cada proyecto/cohorte con presupuesto.
+ */
+function _sincronizarPresupuestoDesdeCohortes(cohortes, gastosPorCohorte) {
+  const hoja = obtenerOCrearHoja(HOJAS.PRESUPUESTO);
+
+  // Leer proyectos ya existentes (filas 4+)
+  const proyectosExistentes = {};
+  if (hoja.getLastRow() >= 4) {
+    const rango = hoja.getRange(4, 2, hoja.getLastRow() - 3, 3).getValues();
+    rango.forEach((fila, idx) => {
+      const nombre = String(fila[0] || '').trim();
+      if (nombre && !nombre.startsWith('⚠️')) {
+        proyectosExistentes[nombre] = 4 + idx;
+      }
+    });
+  }
+
+  // Agregar cohortes que no existan todavía
+  let agregadas = 0;
+  cohortes.forEach(c => {
+    const nombre = String(c[COL_COHORTE.NOMBRE]   || '').trim();
+    const proyec = String(c[COL_COHORTE.PROYECTO] || c._fuente || '').trim();
+    const clave  = nombre || proyec;
+    if (!clave) return;
+
+    const presup = parseMonto(c[COL_COHORTE.PRESUP_TOTAL]) ||
+                   parseMonto(c[COL_COHORTE.PRESUP_PRACT]);
+
+    if (!proyectosExistentes[clave] && !proyectosExistentes[nombre]) {
+      hoja.appendRow(['', nombre, proyec + ' — ' + (c[COL_COHORTE.ESTADO] || ''), presup, '', '', '']);
+      agregadas++;
+    }
+  });
+
+  if (agregadas > 0) {
+    escribirLog('Agregadas ' + agregadas + ' nuevas cohortes a PRESUPUESTO.', 'OK');
+  }
+
+  // Actualizar los cálculos
+  actualizarResumenPresupuesto();
+}
+
+/** Compara dos textos ignorando acentos, mayúsculas y guiones bajos. */
+function _textoSimilar(a, b) {
+  if (!a || !b) return false;
+  const limpiar = s => s.toLowerCase()
+    .replace(/[_-]/g, ' ')
+    .replace(/[áàä]/g, 'a').replace(/[éèë]/g, 'e')
+    .replace(/[íìï]/g, 'i').replace(/[óòö]/g, 'o')
+    .replace(/[úùü]/g, 'u').replace(/ñ/g, 'n')
+    .trim();
+  return limpiar(String(a)).includes(limpiar(String(b))) ||
+         limpiar(String(b)).includes(limpiar(String(a)));
+}
+
 // ============================================================
 // GESTIÓN DE PRESUPUESTO POR PROYECTO
 // ============================================================
