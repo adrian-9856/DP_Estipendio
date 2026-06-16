@@ -53,60 +53,94 @@ const HOJAS = {
   LOG:           'LOG',
 };
 
-// Nombres reales de columnas en el CSV de KoboToolbox
-// (detectados automáticamente del export — pueden variar según configuración del formulario)
-const COL = {
-  CREAMOS_ID:       'Creamos_ID',
-  NOMBRE:           'Nombre_s',
-  APELLIDO:         'Apellido_s',
-  FECHA:            'Fecha',
+// Nombres de columnas en el CSV exportado del formulario v11
+// Cada proyecto tiene su propio grupo de campos
+const COL_RAW = {
+  // Campos comunes
   PROYECTO:         'Proyecto',
-  FASE:             'Fase',
-  ESPECIALIDAD:     'group_bm1bx44/Especialidad',
-  MOTIVO_DESCUENTO: 'group_bm1bx44/Motivo_de_descuento',
-  INCENTIVO:        'group_bm1bx44/Incentivo',
-  TOTAL_HORAS:      'group_bm1bx44/Total_de_horas',
-  MONTO_TOTAL:      'group_bm1bx44/Monto_total',
-  COMENTARIOS:      'group_bm1bx44/Comentarios',
-  FIRMA_FORMACION:  'group_bm1bx44/Firma',
-  FIRMA:            'Firma_001',
+  FECHA:            'Fecha',
   KOBO_ID:          '_id',
   UUID:             '_uuid',
   SUBMISSION_TIME:  '_submission_time',
   VALIDATION:       '_validation_status',
-  NOTES:            '_notes',
   STATUS:           '_status',
   SUBMITTED_BY:     '_submitted_by',
-  TAGS:             '_tags',
   INDEX:            '_index',
-  VERSION:          '__version__',
-  ROOT_UUID:        'meta/rootUuid',
+
+  // Grupo Alimentos y Bebidas
+  AB_COHORTE:       'group_ab/Cohorte_AB',
+  AB_PARTICIPANTE:  'group_ab/Participante_AB',
+  AB_CREAMOS_ID:    'group_ab/Creamos_ID_AB',
+  AB_MONTO_BASE:    'group_ab/Monto_base_ab',
+  AB_DESCUENTO:     'group_ab/Descuento_ab',
+  AB_MONTO_TOTAL:   'group_ab/Monto_total_ab',
+  AB_MOTIVO:        'group_ab/Motivo_de_descuento_ab',
+  AB_INCENTIVO:     'group_ab/Incentivo_ab',
+  AB_FIRMA:         'group_ab/Firma_ab',
+
+  // Grupo Tecnología
+  TECH_COHORTE:     'group_tech/Cohorte_Tech',
+  TECH_PARTICIPANTE:'group_tech/Participante_Tech',
+  TECH_CREAMOS_ID:  'group_tech/Creamos_ID_Tech',
+  TECH_MONTO_BASE:  'group_tech/Monto_base_tech',
+  TECH_DESCUENTO:   'group_tech/Descuento_tech',
+  TECH_MONTO_TOTAL: 'group_tech/Monto_total_tech',
+  TECH_MOTIVO:      'group_tech/Motivo_de_descuento_tech',
+  TECH_INCENTIVO:   'group_tech/Incentivo_tech',
+  TECH_FIRMA:       'group_tech/Firma_tech',
+
+  // Grupo Empleabilidad
+  EMP_CREAMOS_ID:   'group_empleabilidad/Creamos_ID_emp',
+  EMP_NOMBRE:       'group_empleabilidad/Nombre_s',
+  EMP_APELLIDO:     'group_empleabilidad/Apellido_s',
+  EMP_FASE:         'group_empleabilidad/Fase_emp',
+  EMP_MONTO_BASE:   'group_empleabilidad/Monto_base_emp',
+  EMP_COMENTARIOS:  'group_empleabilidad/Comentarios_emp',
+  EMP_FIRMA:        'group_empleabilidad/Firma_emp',
 };
 
-// Columnas a mostrar en la hoja DATOS (nombres amigables para el encabezado)
+// Columnas NORMALIZADAS en la hoja DATOS (esquema unificado sin importar el proyecto)
+const COL = {
+  CREAMOS_ID:       'creamos_id',
+  NOMBRE:           'nombre',
+  APELLIDO:         'apellido',
+  FECHA:            'fecha',
+  PROYECTO:         'proyecto',
+  FASE:             'fase',
+  MONTO_BASE:       'monto_base',
+  DESCUENTO:        'descuento',
+  MONTO_TOTAL:      'monto_total',
+  MOTIVO_DESCUENTO: 'motivo_descuento',
+  INCENTIVO:        'incentivo',
+  COMENTARIOS:      'comentarios',
+  FIRMA:            'firma',
+  KOBO_ID:          'kobo_id',
+  UUID:             'uuid',
+  SUBMISSION_TIME:  'submission_time',
+  VALIDATION:       'validation_status',
+  STATUS:           'status',
+  SUBMITTED_BY:     'submitted_by',
+  INDEX:            'kobo_index',
+};
+
+// Encabezados amigables para la hoja DATOS (mismo orden que HEADERS_DATOS)
 const HEADERS_DISPLAY = [
   'Creamos ID', 'Nombre', 'Apellido', 'Fecha',
-  'Proyecto', 'Fase',
-  'Especialidad', 'Motivo de descuento', 'Incentivo',
-  'Total horas', 'Monto total', 'Comentarios',
-  'Firma formación', 'Firma',
+  'Proyecto', 'Fase / Cohorte',
+  'Monto Base (Q)', 'Descuento (Q)', 'Monto Total (Q)',
+  'Motivo de Descuento', 'Incentivo', 'Comentarios', 'Firma',
   '_id', '_uuid', '_submission_time',
-  '_validation_status', '_notes', '_status',
-  '_submitted_by', '_tags', '_index',
-  '__version__', 'meta/rootUuid',
+  '_validation_status', '_status', '_submitted_by', '_index',
 ];
 
-// Columnas en el CSV (mismo orden que HEADERS_DISPLAY)
+// Claves internas (mismo orden que HEADERS_DISPLAY)
 const HEADERS_DATOS = [
   COL.CREAMOS_ID, COL.NOMBRE, COL.APELLIDO, COL.FECHA,
   COL.PROYECTO,   COL.FASE,
-  COL.ESPECIALIDAD, COL.MOTIVO_DESCUENTO, COL.INCENTIVO,
-  COL.TOTAL_HORAS,  COL.MONTO_TOTAL, COL.COMENTARIOS,
-  COL.FIRMA_FORMACION, COL.FIRMA,
+  COL.MONTO_BASE, COL.DESCUENTO, COL.MONTO_TOTAL,
+  COL.MOTIVO_DESCUENTO, COL.INCENTIVO, COL.COMENTARIOS, COL.FIRMA,
   COL.KOBO_ID, COL.UUID, COL.SUBMISSION_TIME,
-  COL.VALIDATION, COL.NOTES, COL.STATUS,
-  COL.SUBMITTED_BY, COL.TAGS, COL.INDEX,
-  COL.VERSION, COL.ROOT_UUID,
+  COL.VALIDATION, COL.STATUS, COL.SUBMITTED_BY, COL.INDEX,
 ];
 
 // Colores de marca
@@ -303,6 +337,93 @@ function normalizarFecha(valor) {
   }
   // Ya está en DD/MM/YYYY → dejar igual
   return s;
+}
+
+/**
+ * Normaliza un registro crudo del CSV de KoboToolbox v11
+ * y devuelve un objeto con el esquema unificado de HEADERS_DATOS.
+ * Detecta automáticamente qué proyecto fue seleccionado y extrae
+ * los campos del grupo correspondiente.
+ */
+function normalizarRegistroKobo(raw) {
+  const proy = String(raw[COL_RAW.PROYECTO] || '').toLowerCase();
+
+  let creamos_id = '', nombre = '', apellido = '', fase = '';
+  let monto_base = '', descuento = '0', monto_total = '';
+  let motivo = '', incentivo = '', comentarios = '', firma = '';
+
+  if (proy.includes('alimentos') || proy === 'alimentos_y_bebidas') {
+    // ── Alimentos y Bebidas ──
+    creamos_id  = raw[COL_RAW.AB_CREAMOS_ID]    || '';
+    const part  = String(raw[COL_RAW.AB_PARTICIPANTE] || '');
+    // El campo Participante_AB puede venir como "Apellido Nombre (ID)" — usar completo como nombre
+    nombre      = part;
+    apellido    = '';
+    fase        = normalizarTexto(raw[COL_RAW.AB_COHORTE]   || '');
+    monto_base  = raw[COL_RAW.AB_MONTO_BASE]    || '';
+    descuento   = raw[COL_RAW.AB_DESCUENTO]     || '0';
+    monto_total = raw[COL_RAW.AB_MONTO_TOTAL]   || monto_base;
+    motivo      = normalizarTexto(raw[COL_RAW.AB_MOTIVO]    || '');
+    incentivo   = normalizarTexto(raw[COL_RAW.AB_INCENTIVO] || '');
+    firma       = raw[COL_RAW.AB_FIRMA]         || '';
+
+  } else if (proy.includes('tech') || proy.includes('tecnolog')) {
+    // ── Tecnología ──
+    creamos_id  = raw[COL_RAW.TECH_CREAMOS_ID]    || '';
+    nombre      = String(raw[COL_RAW.TECH_PARTICIPANTE] || '');
+    apellido    = '';
+    fase        = normalizarTexto(raw[COL_RAW.TECH_COHORTE]   || '');
+    monto_base  = raw[COL_RAW.TECH_MONTO_BASE]    || '';
+    descuento   = raw[COL_RAW.TECH_DESCUENTO]     || '0';
+    monto_total = raw[COL_RAW.TECH_MONTO_TOTAL]   || monto_base;
+    motivo      = normalizarTexto(raw[COL_RAW.TECH_MOTIVO]    || '');
+    incentivo   = normalizarTexto(raw[COL_RAW.TECH_INCENTIVO] || '');
+    firma       = raw[COL_RAW.TECH_FIRMA]         || '';
+
+  } else if (proy.includes('emplea')) {
+    // ── Empleabilidad (campos de texto libre) ──
+    creamos_id  = raw[COL_RAW.EMP_CREAMOS_ID]   || '';
+    nombre      = raw[COL_RAW.EMP_NOMBRE]        || '';
+    apellido    = raw[COL_RAW.EMP_APELLIDO]      || '';
+    fase        = normalizarTexto(raw[COL_RAW.EMP_FASE] || '');
+    monto_base  = raw[COL_RAW.EMP_MONTO_BASE]   || '';
+    descuento   = '0';
+    monto_total = monto_base;
+    motivo      = '';
+    incentivo   = '';
+    comentarios = raw[COL_RAW.EMP_COMENTARIOS]  || '';
+    firma       = raw[COL_RAW.EMP_FIRMA]        || '';
+
+  } else {
+    // Proyecto desconocido — intentar extraer lo que haya
+    creamos_id = raw['Creamos_ID'] || raw['group_empleabilidad/Creamos_ID_emp'] || '';
+    nombre     = raw['group_empleabilidad/Nombre_s'] || '';
+    apellido   = raw['group_empleabilidad/Apellido_s'] || '';
+    fase       = '';
+  }
+
+  return {
+    [COL.CREAMOS_ID]:       creamos_id,
+    [COL.NOMBRE]:           nombre,
+    [COL.APELLIDO]:         apellido,
+    [COL.FECHA]:            normalizarFecha(raw[COL_RAW.FECHA] || ''),
+    [COL.PROYECTO]:         normalizarTexto(raw[COL_RAW.PROYECTO] || ''),
+    [COL.FASE]:             fase,
+    [COL.MONTO_BASE]:       monto_base,
+    [COL.DESCUENTO]:        descuento,
+    [COL.MONTO_TOTAL]:      monto_total,
+    [COL.MOTIVO_DESCUENTO]: motivo,
+    [COL.INCENTIVO]:        incentivo,
+    [COL.COMENTARIOS]:      comentarios,
+    [COL.FIRMA]:            firma,
+    [COL.KOBO_ID]:          raw[COL_RAW.KOBO_ID]          || '',
+    [COL.UUID]:             raw[COL_RAW.UUID]             || '',
+    [COL.SUBMISSION_TIME]:  raw[COL_RAW.SUBMISSION_TIME]  || '',
+    [COL.VALIDATION]:       raw[COL_RAW.VALIDATION]       || '',
+    [COL.STATUS]:           raw[COL_RAW.STATUS]           || '',
+    [COL.SUBMITTED_BY]:     raw[COL_RAW.SUBMITTED_BY]     || '',
+    [COL.INDEX]:            raw[COL_RAW.INDEX]            || '',
+  };
 }
 
 /** Convierte un string de monto a número (limpia Q, comas, espacios). */
@@ -643,17 +764,10 @@ function importarDesdeKobo() {
     const hojaDatos = obtenerOCrearHoja(HOJAS.DATOS);
     _asegurarEncabezadosDatos(hojaDatos);
 
+    // Normalizar cada registro usando el esquema del formulario v11
     const matrizNueva = filasNuevas.map(f => {
-      // Normalizar campos antes de guardar
-      const fila = {};
-      Object.keys(f).forEach(k => { fila[k] = f[k]; });
-      fila[COL.PROYECTO]  = normalizarTexto(f[COL.PROYECTO]);
-      fila[COL.FASE]      = normalizarTexto(f[COL.FASE]);
-      fila[COL.FECHA]     = normalizarFecha(f[COL.FECHA]);
-      fila[COL.ESPECIALIDAD]     = normalizarTexto(f[COL.ESPECIALIDAD]);
-      fila[COL.MOTIVO_DESCUENTO] = normalizarTexto(f[COL.MOTIVO_DESCUENTO]);
-      fila[COL.INCENTIVO]        = normalizarTexto(f[COL.INCENTIVO]);
-      return HEADERS_DATOS.map(col => fila[col] || '');
+      const normalizado = normalizarRegistroKobo(f);
+      return HEADERS_DATOS.map(col => normalizado[col] || '');
     });
 
     const primerFilaVacia = hojaDatos.getLastRow() + 1;
