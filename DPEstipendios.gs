@@ -549,19 +549,21 @@ function onOpen() {
   try {
     SpreadsheetApp.getUi()
       .createMenu('DP Estipendios')
-      .addItem('⬇️ Importar datos nuevos de KoboToolbox', 'importarDesdeKobo')
-      .addItem('🔄 Reimportar TODO (borra y recarga)', 'reimportarTodo')
+      // ── USO DIARIO ──
+      .addItem('⬇️ Importar registros nuevos de KoboToolbox', 'importarDesdeKobo')
+      .addItem('🏫 Actualizar catálogo de Cohortes', 'importarCohortes')
       .addSeparator()
-      .addItem('🏫 Importar Cohortes desde proyectos', 'importarCohortes')
+      // ── MANTENIMIENTO ──
+      .addItem('🔁 Actualizar vistas (Dashboard / Cohortes / Presupuesto)', 'actualizarVistas')
+      .addItem('📐 Ordenar pestañas y aplicar colores', 'ordenarPestañas')
       .addSeparator()
-      .addItem('📊 Actualizar Dashboard', 'actualizarDashboard')
-      .addItem('👥 Actualizar vista de Cohortes', 'actualizarCohortes')
-      .addItem('💰 Actualizar Presupuesto', 'actualizarResumenPresupuesto')
-      .addSeparator()
+      // ── CONFIGURACIÓN ──
       .addItem('⚙️ Configurar estructura inicial', 'configurarEstructuraInicial')
       .addItem('⏰ Activar importación automática diaria', 'activarTriggerDiario')
       .addItem('🚫 Desactivar importación automática', 'desactivarTriggerDiario')
       .addSeparator()
+      // ── AVANZADO ──
+      .addItem('🔄 Reimportar TODO desde KoboToolbox (borra y recarga)', 'reimportarTodo')
       .addItem('🗑️ REINSTALAR TODO DESDE CERO', 'reinstalarTodo')
       .addToUi();
   } catch (e) {
@@ -615,8 +617,8 @@ function reinstalarTodo() {
 
     // 3. Crear todas las hojas en orden correcto
     const ordenHojas = [
-      HOJAS.INICIO, HOJAS.DASHBOARD, HOJAS.COHORTES, HOJAS.COHORTES_REF,
-      HOJAS.PRESUPUESTO, HOJAS.DATOS, HOJAS.LOG,
+      HOJAS.INICIO, HOJAS.DASHBOARD, HOJAS.COHORTES, HOJAS.PRESUPUESTO,
+      HOJAS.COHORTES_REF, HOJAS.DATOS, HOJAS.LOG,
     ];
     ordenHojas.reverse().forEach(nombre => {
       ss.insertSheet(nombre, 0);
@@ -805,12 +807,19 @@ function reimportarTodo() {
 
 function _ordenarHojas() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Orden pensado para el usuario:
+  // Primero lo que se consulta a diario → luego lo técnico/referencia al final
   const orden = [
-    HOJAS.INICIO, HOJAS.DASHBOARD, HOJAS.COHORTES, HOJAS.COHORTES_REF,
-    HOJAS.PRESUPUESTO, HOJAS.DATOS, HOJAS.LOG,
+    HOJAS.INICIO,       // 1. Guía del sistema
+    HOJAS.DASHBOARD,    // 2. Resumen ejecutivo
+    HOJAS.COHORTES,     // 3. Detalle por cohorte
+    HOJAS.PRESUPUESTO,  // 4. Control de presupuesto
+    HOJAS.COHORTES_REF, // 5. Catálogo de referencia (técnico)
+    HOJAS.DATOS,        // 6. Datos crudos (técnico)
+    HOJAS.LOG,          // 7. Historial del sistema (técnico)
   ];
 
-  // Mover cada hoja a su posición correcta
   orden.forEach((nombre, idx) => {
     const hoja = ss.getSheetByName(nombre);
     if (hoja) {
@@ -819,11 +828,21 @@ function _ordenarHojas() {
     }
   });
 
-  // Aplicar colores a las pestañas
+  // Colores de pestaña
   Object.entries(TAB_COLORS).forEach(([key, color]) => {
     const hoja = ss.getSheetByName(HOJAS[key]);
     if (hoja) hoja.setTabColor(color);
   });
+}
+
+/** Reordena pestañas y aplica colores. Se puede llamar desde el menú sin perder datos. */
+function ordenarPestañas() {
+  _ordenarHojas();
+  SpreadsheetApp.getActiveSpreadsheet().setActiveSheet(
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJAS.DASHBOARD) ||
+    SpreadsheetApp.getActiveSpreadsheet().getSheets()[0]
+  );
+  SpreadsheetApp.getUi().alert('✅ Pestañas ordenadas y colores aplicados.', '', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function _crearHojaInicio() {
@@ -866,14 +885,15 @@ function _crearHojaInicio() {
        .setHorizontalAlignment('center');
   h.setRowHeight(5, 24);
 
-  // Filas de hojas
+  // Filas de hojas — en el mismo orden que aparecen las pestañas
   const filas = [
-    ['📊 DASHBOARD',    'Resumen ejecutivo: total gastado, presupuesto ejecutado, top participantes y gasto por proyecto.'],
-    ['👥 COHORTES',     'Vista agrupada por cohorte: lista de participantes, montos pagados y saldo de presupuesto.'],
-    ['📚 COHORTES_REF', 'Catálogo de cohortes importado desde los Google Sheets de cada proyecto (Alimentos y Bebidas, Tech).'],
+    ['📊 DASHBOARD',    'Resumen ejecutivo: total gastado, presupuesto ejecutado, top participantes y gasto por proyecto. Se actualiza automáticamente.'],
+    ['👥 COHORTES',     'Lista de pagos agrupados por cohorte con nombres, montos y saldo de presupuesto. Se actualiza automáticamente.'],
+    ['💰 PRESUPUESTO',  'Presupuesto asignado vs. gastado por proyecto. Saldo en verde si hay disponible, rojo si se excedió.'],
+    ['📚 COHORTES_REF', '(Referencia técnica) Catálogo de cohortes importado desde los Google Sheets de AB y Tech. No editar a mano.'],
     ['💰 PRESUPUESTO',  'Presupuesto asignado vs. gastado por proyecto. Columna "Saldo" en verde (disponible) o rojo (excedido).'],
-    ['🗃️ DATOS',        'Datos crudos importados de KoboToolbox. No editar a mano — se actualiza con el menú DP Estipendios.'],
-    ['📝 LOG',          'Historial de importaciones, errores y operaciones del sistema. Útil para diagnóstico.'],
+    ['🗃️ DATOS',        '(Técnico) Registros importados de KoboToolbox. No editar a mano. Solo se pueden ver, no modificar.'],
+    ['📝 LOG',          '(Técnico) Historial de cada importación y error. Útil si algo no funciona bien.'],
   ];
 
   filas.forEach(([nombre, desc], idx) => {
