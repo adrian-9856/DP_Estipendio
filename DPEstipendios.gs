@@ -66,11 +66,12 @@ const TAB_COLORS = {
 };
 
 // Nombres de columnas en el CSV exportado del formulario v11
-// Cada proyecto tiene su propio grupo de campos
+// El export usa labels como encabezados: "Alimentos y Bebidas/Cohorte"
+// Se mantienen también los nombres internos como fallback por si cambia la configuración del export.
 const COL_RAW = {
   // Campos comunes
   PROYECTO:         'Proyecto',
-  FECHA:            'Fecha',
+  FECHA:            'Fecha de registro',    // label del campo "Fecha"
   KOBO_ID:          '_id',
   UUID:             '_uuid',
   SUBMISSION_TIME:  '_submission_time',
@@ -79,27 +80,27 @@ const COL_RAW = {
   SUBMITTED_BY:     '_submitted_by',
   INDEX:            '_index',
 
-  // Grupo Alimentos y Bebidas
-  AB_COHORTE:       'group_ab/Cohorte_AB',
-  AB_PARTICIPANTE:  'group_ab/Participante_AB',
-  AB_CREAMOS_ID:    'group_ab/Creamos_ID_AB',
-  AB_MONTO_BASE:    'group_ab/Monto_base_ab',
-  AB_DESCUENTO:     'group_ab/Descuento_ab',
-  AB_MONTO_TOTAL:   'group_ab/Monto_total_ab',
-  AB_MOTIVO:        'group_ab/Motivo_de_descuento_ab',
-  AB_INCENTIVO:     'group_ab/Incentivo_ab',
-  AB_FIRMA:         'group_ab/Firma_ab',
+  // Grupo Alimentos y Bebidas — formato: "Label de grupo/Label de campo"
+  AB_COHORTE:       'Alimentos y Bebidas/Cohorte',
+  AB_PARTICIPANTE:  'Alimentos y Bebidas/Nombre del participante',
+  AB_CREAMOS_ID:    'Alimentos y Bebidas/Creamos_ID_AB',
+  AB_MONTO_BASE:    'Alimentos y Bebidas/Monto base (Q)',
+  AB_DESCUENTO:     'Alimentos y Bebidas/Descuento_ab',
+  AB_MONTO_TOTAL:   'Alimentos y Bebidas/Monto_total_ab',
+  AB_MOTIVO:        'Alimentos y Bebidas/Motivo de descuento',
+  AB_INCENTIVO:     'Alimentos y Bebidas/Recibio incentivo adicional?',
+  AB_FIRMA:         'Alimentos y Bebidas/Firma del participante',
 
-  // Grupo Tecnología
-  TECH_COHORTE:     'group_tech/Cohorte_Tech',
-  TECH_PARTICIPANTE:'group_tech/Participante_Tech',
-  TECH_CREAMOS_ID:  'group_tech/Creamos_ID_Tech',
-  TECH_MONTO_BASE:  'group_tech/Monto_base_tech',
-  TECH_DESCUENTO:   'group_tech/Descuento_tech',
-  TECH_MONTO_TOTAL: 'group_tech/Monto_total_tech',
-  TECH_MOTIVO:      'group_tech/Motivo_de_descuento_tech',
-  TECH_INCENTIVO:   'group_tech/Incentivo_tech',
-  TECH_FIRMA:       'group_tech/Firma_tech',
+  // Grupo Tecnología — label del grupo en KoboToolbox es "Tecnologia" (sin tilde)
+  TECH_COHORTE:     'Tecnologia/Cohorte',
+  TECH_PARTICIPANTE:'Tecnologia/Nombre del participante',
+  TECH_CREAMOS_ID:  'Tecnologia/Creamos_ID_Tech',
+  TECH_MONTO_BASE:  'Tecnologia/Monto base (Q)',
+  TECH_DESCUENTO:   'Tecnologia/Descuento_tech',
+  TECH_MONTO_TOTAL: 'Tecnologia/Monto_total_tech',
+  TECH_MOTIVO:      'Tecnologia/Motivo de descuento',
+  TECH_INCENTIVO:   'Tecnologia/Recibio incentivo adicional?',
+  TECH_FIRMA:       'Tecnologia/Firma del participante',
 
 };
 
@@ -344,6 +345,19 @@ function normalizarFecha(valor) {
 }
 
 /**
+ * Busca el primer valor no vacío entre las claves indicadas.
+ * Permite que el código funcione con labels Y con nombres internos
+ * por si el export de KoboToolbox cambia de configuración.
+ */
+function _col(raw, ...claves) {
+  for (const k of claves) {
+    const v = raw[k];
+    if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+  }
+  return '';
+}
+
+/**
  * Normaliza un registro crudo del CSV de KoboToolbox v11
  * y devuelve un objeto con el esquema unificado de HEADERS_DATOS.
  * Detecta automáticamente qué proyecto fue seleccionado y extrae
@@ -358,43 +372,43 @@ function normalizarRegistroKobo(raw) {
 
   if (proy.includes('alimentos') || proy === 'alimentos_y_bebidas') {
     // ── Alimentos y Bebidas ──
-    creamos_id  = raw[COL_RAW.AB_CREAMOS_ID]    || '';
-    const part  = String(raw[COL_RAW.AB_PARTICIPANTE] || '');
-    // El campo Participante_AB puede venir como "Apellido Nombre (ID)" — usar completo como nombre
-    nombre      = part;
+    // _col() intenta el nombre label primero, luego el nombre interno como fallback
+    creamos_id  = _col(raw, COL_RAW.AB_CREAMOS_ID,    'group_ab/Creamos_ID_AB');
+    nombre      = _col(raw, COL_RAW.AB_PARTICIPANTE,  'group_ab/Participante_AB');
     apellido    = '';
-    fase        = normalizarTexto(raw[COL_RAW.AB_COHORTE]   || '');
-    monto_base  = raw[COL_RAW.AB_MONTO_BASE]    || '';
-    descuento   = raw[COL_RAW.AB_DESCUENTO]     || '0';
-    monto_total = raw[COL_RAW.AB_MONTO_TOTAL]   || monto_base;
-    motivo      = normalizarTexto(raw[COL_RAW.AB_MOTIVO]    || '');
-    incentivo   = normalizarTexto(raw[COL_RAW.AB_INCENTIVO] || '');
-    firma       = raw[COL_RAW.AB_FIRMA]         || '';
+    fase        = normalizarTexto(_col(raw, COL_RAW.AB_COHORTE,    'group_ab/Cohorte_AB'));
+    monto_base  = _col(raw, COL_RAW.AB_MONTO_BASE,   'group_ab/Monto_base_ab');
+    descuento   = _col(raw, COL_RAW.AB_DESCUENTO,    'group_ab/Descuento_ab') || '0';
+    monto_total = _col(raw, COL_RAW.AB_MONTO_TOTAL,  'group_ab/Monto_total_ab') || monto_base;
+    motivo      = normalizarTexto(_col(raw, COL_RAW.AB_MOTIVO,    'group_ab/Motivo_de_descuento_ab'));
+    incentivo   = normalizarTexto(_col(raw, COL_RAW.AB_INCENTIVO, 'group_ab/Incentivo_ab'));
+    firma       = _col(raw, COL_RAW.AB_FIRMA,         'group_ab/Firma_ab');
 
   } else if (proy.includes('tech') || proy.includes('tecnolog')) {
     // ── Tecnología ──
-    creamos_id  = raw[COL_RAW.TECH_CREAMOS_ID]    || '';
-    nombre      = String(raw[COL_RAW.TECH_PARTICIPANTE] || '');
+    creamos_id  = _col(raw, COL_RAW.TECH_CREAMOS_ID,    'group_tech/Creamos_ID_Tech');
+    nombre      = _col(raw, COL_RAW.TECH_PARTICIPANTE,  'group_tech/Participante_Tech');
     apellido    = '';
-    fase        = normalizarTexto(raw[COL_RAW.TECH_COHORTE]   || '');
-    monto_base  = raw[COL_RAW.TECH_MONTO_BASE]    || '';
-    descuento   = raw[COL_RAW.TECH_DESCUENTO]     || '0';
-    monto_total = raw[COL_RAW.TECH_MONTO_TOTAL]   || monto_base;
-    motivo      = normalizarTexto(raw[COL_RAW.TECH_MOTIVO]    || '');
-    incentivo   = normalizarTexto(raw[COL_RAW.TECH_INCENTIVO] || '');
-    firma       = raw[COL_RAW.TECH_FIRMA]         || '';
+    fase        = normalizarTexto(_col(raw, COL_RAW.TECH_COHORTE,    'group_tech/Cohorte_Tech'));
+    monto_base  = _col(raw, COL_RAW.TECH_MONTO_BASE,   'group_tech/Monto_base_tech');
+    descuento   = _col(raw, COL_RAW.TECH_DESCUENTO,    'group_tech/Descuento_tech') || '0';
+    monto_total = _col(raw, COL_RAW.TECH_MONTO_TOTAL,  'group_tech/Monto_total_tech') || monto_base;
+    motivo      = normalizarTexto(_col(raw, COL_RAW.TECH_MOTIVO,    'group_tech/Motivo_de_descuento_tech'));
+    incentivo   = normalizarTexto(_col(raw, COL_RAW.TECH_INCENTIVO, 'group_tech/Incentivo_tech'));
+    firma       = _col(raw, COL_RAW.TECH_FIRMA,         'group_tech/Firma_tech');
 
   } else {
     // Proyecto no reconocido — registrar en LOG pero no descartar
-    nombre  = raw[COL_RAW.AB_PARTICIPANTE] || raw[COL_RAW.TECH_PARTICIPANTE] || '';
-    fase    = '';
+    nombre = _col(raw, COL_RAW.AB_PARTICIPANTE, COL_RAW.TECH_PARTICIPANTE,
+                  'group_ab/Participante_AB', 'group_tech/Participante_Tech');
+    fase   = '';
   }
 
   return {
     [COL.CREAMOS_ID]:       creamos_id,
     [COL.NOMBRE]:           nombre,
     [COL.APELLIDO]:         apellido,
-    [COL.FECHA]:            normalizarFecha(raw[COL_RAW.FECHA] || ''),
+    [COL.FECHA]:            normalizarFecha(_col(raw, COL_RAW.FECHA, 'Fecha')),
     [COL.PROYECTO]:         normalizarTexto(raw[COL_RAW.PROYECTO] || ''),
     [COL.FASE]:             fase,
     [COL.MONTO_BASE]:       monto_base,
@@ -940,16 +954,21 @@ function importarDesdeKobo() {
     const filas = parseCSV(csvText);
     escribirLog('CSV descargado. Registros totales: ' + filas.length, 'INFO');
 
-    // 3. Diagnóstico: muestra columnas reales del CSV y valores de la primera fila
+    // 3. Diagnóstico: muestra columnas reales del CSV y valores clave de la primera fila
     if (filas.length > 0) {
       const colsReales = Object.keys(filas[0]);
       escribirLog('Columnas del CSV (' + colsReales.length + '): ' + colsReales.join(' | '), 'INFO');
-      const uuidReal = filas[0][COL.UUID]          || '(col _uuid no encontrada)';
-      const idReal   = filas[0][COL.KOBO_ID]       || '(col _id no encontrada)';
-      const fechaReal = filas[0][COL.FECHA]         || '(col Fecha no encontrada)';
-      const subReal  = filas[0][COL.SUBMISSION_TIME]|| '(col _submission_time no encontrada)';
-      escribirLog('Primera fila — _uuid: "' + uuidReal + '" | _id: "' + idReal +
-        '" | Fecha: "' + fechaReal + '" | sub_time: "' + subReal + '"', 'INFO');
+      // Verificar columnas críticas con sus valores reales
+      const f0 = filas[0];
+      const diag = [
+        'Proyecto="'       + (f0[COL_RAW.PROYECTO]        || '❌') + '"',
+        'Fecha="'          + (_col(f0, COL_RAW.FECHA, 'Fecha') || '❌') + '"',
+        'AB_Cohorte="'     + (_col(f0, COL_RAW.AB_COHORTE,    'group_ab/Cohorte_AB')        || '❌') + '"',
+        'AB_Nombre="'      + (_col(f0, COL_RAW.AB_PARTICIPANTE,'group_ab/Participante_AB')   || '❌') + '"',
+        'AB_MontoTotal="'  + (_col(f0, COL_RAW.AB_MONTO_TOTAL, 'group_ab/Monto_total_ab')   || '❌') + '"',
+        'Tech_Cohorte="'   + (_col(f0, COL_RAW.TECH_COHORTE,  'group_tech/Cohorte_Tech')    || '❌') + '"',
+      ].join(' | ');
+      escribirLog('Diagnóstico primera fila: ' + diag, 'INFO');
     }
 
     // 4. Filtrar solo AÑO_FILTRO — busca el año como texto en cualquier campo de fecha
