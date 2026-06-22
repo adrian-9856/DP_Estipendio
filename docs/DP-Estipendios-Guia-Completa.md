@@ -2,7 +2,7 @@
 
 > **Propósito de este documento:** Guía centralizada para cualquier persona (o IA) que necesite entender, usar o modificar el sistema de control de estipendios de Creamos Guatemala.
 > 
-> **Última actualización:** 2026-06-16
+> **Última actualización:** 2026-06-22
 > **Autor original:** Adrian Torres — adrian@creamosguatemala.org
 
 ---
@@ -116,8 +116,9 @@ MENÚ (onOpen)
 Al inicio del archivo hay un bloque de configuración. **Si algo cambia en KoboToolbox o en los proyectos, aquí es donde se toca:**
 
 ```javascript
-// URL del CSV exportado de KoboToolbox
-const KOBO_URL = 'https://kf.kobotoolbox.org/api/v2/...';
+// URL del CSV exportado de KoboToolbox (formulario v11 — versión 2026061611)
+// Asset ID: aKHz2RcV5eYtZ8oWpZVqq9
+const KOBO_URL = 'https://kf.kobotoolbox.org/api/v2/assets/aKHz2RcV5eYtZ8oWpZVqq9/export-settings/esiHbDfadENGuL6btMr55Mi/data.csv';
 
 // Google Sheets externos con catálogo de cohortes
 const FUENTES_COHORTES = [
@@ -258,7 +259,8 @@ Los datos se leen de la hoja **"Cohortes"** de cada spreadsheet y se guardan en 
 | v1.4 | 2026-06 | Conexión a Google Sheets externos para catálogo de cohortes (COHORTES_REF) |
 | v1.5 | 2026-06 | Solo Alimentos y Bebidas + Tech (Empleabilidad eliminado) |
 | v1.6 | 2026-06 | Fix COHORTES_REF con filas vacías, botón Reinstalar todo |
-| v1.7 | 2026-06 | Hoja INICIO (guía visual), colores de pestañas, orden correcto de hojas |
+| v1.7 | 2026-06-22 | Hoja INICIO (guía visual), colores de pestañas, orden correcto de hojas |
+| v1.8 | 2026-06-22 | Actualización a formulario KoboToolbox v11 nuevo (asset aKHz2RcV5eYtZ8oWpZVqq9). Cohortes activas: Barismo 3, Barismo 4, Gastronomía 1 (AB) · Alfa Digital 1, SAC 1 (Tech) |
 
 ---
 

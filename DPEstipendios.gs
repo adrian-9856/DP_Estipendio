@@ -3,8 +3,8 @@
 // ============================================================
 
 const KOBO_URL =
-  'https://kf.kobotoolbox.org/api/v2/assets/aNpJWVRoxxQ5a8pwBQVJac' +
-  '/export-settings/esqLSo9A8oFvxVwZKUXwADx/data.csv';
+  'https://kf.kobotoolbox.org/api/v2/assets/aKHz2RcV5eYtZ8oWpZVqq9' +
+  '/export-settings/esiHbDfadENGuL6btMr55Mi/data.csv';
 
 // Fuentes externas de cohortes — agrega aquí cada Google Sheet de proyecto
 const FUENTES_COHORTES = [
