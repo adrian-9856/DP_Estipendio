@@ -1768,7 +1768,7 @@ function _escribirCohorteRef(hoja, cohortes, gastosPorCohorte) {
   hoja.clearFormats();
 
   // Título
-  const rTit = hoja.getRange('B1:M1');
+  const rTit = hoja.getRange('B1:I1');
   rTit.merge();
   rTit.setValue('REFERENCIA DE COHORTES — TODAS LAS FUENTES');
   rTit.setBackground(COLORES.PRIMARIO);
@@ -1778,11 +1778,10 @@ function _escribirCohorteRef(hoja, cohortes, gastosPorCohorte) {
   rTit.setHorizontalAlignment('center');
   hoja.setRowHeight(1, 40);
 
-  // Encabezados
+  // Encabezados — solo columnas necesarias
   const encabezados = [
-    'Fuente', 'Nombre Cohorte', 'Proyecto', 'Año', 'Estado',
-    'Cupo', 'Pre-Inscritos', 'Graduados', 'Retirados',
-    'Presupuesto Total (Q)', 'Estipendios Gastados (Q)', 'Saldo Estipendios (Q)',
+    'Nombre Cohorte', 'Proyecto', 'Año', 'Estado', 'Cupo',
+    'Presupuesto (Q)', 'Gastado (Q)', 'Saldo (Q)',
   ];
   const rEnc = hoja.getRange(2, 2, 1, encabezados.length);
   rEnc.setValues([encabezados]);
@@ -1824,15 +1823,11 @@ function _escribirCohorteRef(hoja, cohortes, gastosPorCohorte) {
     if (esNueva) nuevasCohortes++;
 
     const valores = [
-      c._fuente,
       nombreCohorte,
       proyecto,
-      c[COL_COHORTE.ANIO]         || '',
+      c[COL_COHORTE.ANIO] || '',
       estado,
-      c[COL_COHORTE.CUPO]         || '',
-      c[COL_COHORTE.PRE_INSCRITOS]|| '',
-      c[COL_COHORTE.GRADUADOS]    || '',
-      c[COL_COHORTE.RETIRADOS]    || '',
+      c[COL_COHORTE.CUPO] || '',
       presupTotal,
       gastadoEstip,
       saldoEstip,
@@ -1846,9 +1841,9 @@ function _escribirCohorteRef(hoja, cohortes, gastosPorCohorte) {
       : (idx % 2 === 0 ? COLORES.FONDO_CARD : '#FFFFFF');
     hoja.getRange(fila, 2, 1, valores.length).setBackground(bg);
 
-    // Color saldo
+    // Color saldo — columna 9 (B=2, +7 columnas)
     const colorSaldo = saldoEstip >= 0 ? COLORES.VERDE : COLORES.ROJO;
-    hoja.getRange(fila, 13).setFontColor(colorSaldo).setFontWeight('bold');
+    hoja.getRange(fila, 9).setFontColor(colorSaldo).setFontWeight('bold');
 
     hoja.setRowHeight(fila, 20);
   });
@@ -1911,15 +1906,15 @@ function _sincronizarPresupuestoDesdeCohortes(cohortes, gastosPorCohorte) {
   actualizarResumenPresupuesto();
 }
 
-/** Compara dos textos ignorando acentos, mayúsculas y guiones bajos. */
+/** Compara dos textos ignorando acentos, mayúsculas, guiones, paréntesis y espacios extra. */
 function _textoSimilar(a, b) {
   if (!a || !b) return false;
   const limpiar = s => s.toLowerCase()
-    .replace(/[_-]/g, ' ')
+    .replace(/[_\-()]/g, ' ')
     .replace(/[áàä]/g, 'a').replace(/[éèë]/g, 'e')
     .replace(/[íìï]/g, 'i').replace(/[óòö]/g, 'o')
     .replace(/[úùü]/g, 'u').replace(/ñ/g, 'n')
-    .trim();
+    .replace(/\s+/g, ' ').trim();
   return limpiar(String(a)).includes(limpiar(String(b))) ||
          limpiar(String(b)).includes(limpiar(String(a)));
 }
@@ -2017,9 +2012,9 @@ function actualizarResumenPresupuesto() {
     }
   }
 
-  // Calcular gastos reales desde DATOS
-  const datos    = _leerDatos();
-  const gastosPorProyecto = _calcularGastosPorProyecto(datos);
+  // Calcular gastos reales desde DATOS agrupados por cohorte
+  const datos = _leerDatos();
+  const gastosPorCohorte = _calcularGastosPorCohorte(datos);
 
   // Leer presupuesto asignado (fila 4 en adelante)
   const ultimaFila = hoja.getLastRow();
@@ -2029,17 +2024,25 @@ function actualizarResumenPresupuesto() {
   const valores = rDatos.getValues();
 
   const nuevosValores = valores.map((fila, idx) => {
-    const proyecto  = String(fila[0] || '').trim();
-    const descripcion = fila[1];
-    let asignado    = parseMonto(fila[2]);
+    const nombreCohorte = String(fila[0] || '').trim();
+    const descripcion   = fila[1];
+    const asignado      = parseMonto(fila[2]);
 
-    if (!proyecto || proyecto.startsWith('⚠️')) return fila;
+    if (!nombreCohorte || nombreCohorte.startsWith('⚠️')) return fila;
 
-    const gastado   = gastosPorProyecto[proyecto] || 0;
-    const saldo     = asignado - gastado;
-    const pctEjec   = asignado > 0 ? ((gastado / asignado) * 100).toFixed(1) + '%' : '—';
+    // Buscar gasto: clave exacta primero, luego por nombre de fase similar
+    let gastado = 0;
+    Object.entries(gastosPorCohorte).forEach(([clave, datos]) => {
+      const fase = clave.split('||')[1] || '';
+      if (fase === nombreCohorte || _textoSimilar(fase, nombreCohorte)) {
+        gastado += datos.total;
+      }
+    });
 
-    return [proyecto, descripcion, asignado, gastado, saldo, pctEjec];
+    const saldo   = asignado - gastado;
+    const pctEjec = asignado > 0 ? ((gastado / asignado) * 100).toFixed(1) + '%' : '—';
+
+    return [nombreCohorte, descripcion, asignado, gastado, saldo, pctEjec];
   });
 
   rDatos.setValues(nuevosValores);
