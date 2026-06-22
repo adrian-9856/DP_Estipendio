@@ -129,13 +129,14 @@ const COL = {
 };
 
 // Encabezados amigables para la hoja DATOS (mismo orden que HEADERS_DATOS)
+// Columnas técnicas de KoboToolbox (_id, _uuid, firma, status, etc.) eliminadas.
+// Solo se conserva la fecha de registro normalizada para referencia.
 const HEADERS_DISPLAY = [
   'Creamos ID', 'Nombre', 'Apellido', 'Fecha',
   'Proyecto', 'Fase / Cohorte',
   'Monto Base (Q)', 'Descuento (Q)', 'Monto Total (Q)',
-  'Motivo de Descuento', 'Incentivo', 'Comentarios', 'Firma',
-  '_id', '_uuid', '_submission_time',
-  '_validation_status', '_status', '_submitted_by', '_index',
+  'Motivo de Descuento', 'Incentivo', 'Comentarios',
+  'Fecha de Registro',
 ];
 
 // Claves internas (mismo orden que HEADERS_DISPLAY)
@@ -143,9 +144,8 @@ const HEADERS_DATOS = [
   COL.CREAMOS_ID, COL.NOMBRE, COL.APELLIDO, COL.FECHA,
   COL.PROYECTO,   COL.FASE,
   COL.MONTO_BASE, COL.DESCUENTO, COL.MONTO_TOTAL,
-  COL.MOTIVO_DESCUENTO, COL.INCENTIVO, COL.COMENTARIOS, COL.FIRMA,
-  COL.KOBO_ID, COL.UUID, COL.SUBMISSION_TIME,
-  COL.VALIDATION, COL.STATUS, COL.SUBMITTED_BY, COL.INDEX,
+  COL.MOTIVO_DESCUENTO, COL.INCENTIVO, COL.COMENTARIOS,
+  COL.SUBMISSION_TIME,
 ];
 
 // Colores de marca
@@ -335,12 +335,16 @@ function normalizarFecha(valor) {
   if (matchISO) {
     return matchISO[3] + '/' + matchISO[2] + '/' + matchISO[1];
   }
-  // ISO sin T: 2026-04-17
+  // ISO con espacio como separador: 2026-04-17 16:00:00
+  const matchDateTime = s.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}:\d{2})/);
+  if (matchDateTime) {
+    return matchDateTime[3] + '/' + matchDateTime[2] + '/' + matchDateTime[1] + ' ' + matchDateTime[4];
+  }
+  // Solo fecha: 2026-04-17
   const matchDate = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (matchDate) {
     return matchDate[3] + '/' + matchDate[2] + '/' + matchDate[1];
   }
-  // Ya está en DD/MM/YYYY → dejar igual
   return s;
 }
 
@@ -417,14 +421,8 @@ function normalizarRegistroKobo(raw) {
     [COL.MOTIVO_DESCUENTO]: motivo,
     [COL.INCENTIVO]:        incentivo,
     [COL.COMENTARIOS]:      comentarios,
-    [COL.FIRMA]:            firma,
-    [COL.KOBO_ID]:          raw[COL_RAW.KOBO_ID]          || '',
-    [COL.UUID]:             raw[COL_RAW.UUID]             || '',
-    [COL.SUBMISSION_TIME]:  raw[COL_RAW.SUBMISSION_TIME]  || '',
-    [COL.VALIDATION]:       raw[COL_RAW.VALIDATION]       || '',
-    [COL.STATUS]:           raw[COL_RAW.STATUS]           || '',
-    [COL.SUBMITTED_BY]:     raw[COL_RAW.SUBMITTED_BY]     || '',
-    [COL.INDEX]:            raw[COL_RAW.INDEX]            || '',
+    // Fecha de Registro: submission_time normalizado a DD/MM/YYYY HH:MM
+    [COL.SUBMISSION_TIME]:  normalizarFecha(raw[COL_RAW.SUBMISSION_TIME] || ''),
   };
 }
 
@@ -1019,16 +1017,12 @@ function importarDesdeKobo() {
     // 5. Obtener IDs ya importados (usa _uuid o _id como clave única)
     const idsExistentes = _obtenerIDsExistentes();
 
-    // 6. Filtrar duplicados — si no tiene ningún ID único, importar de todas formas
+    // 6. Filtrar duplicados usando submission_time normalizado como clave única
     const filasNuevas = filasFiltradas.filter(f => {
-      const uuid = (f[COL.UUID]     || '').trim();
-      const id   = (f[COL.KOBO_ID] || '').trim();
-      // Sin ningún identificador → siempre importar
-      if (!uuid && !id) return true;
-      // Excluir si ya existe cualquiera de los dos IDs
-      if (uuid && idsExistentes.has(uuid)) return false;
-      if (id   && idsExistentes.has(id))   return false;
-      return true;
+      const subTime = normalizarFecha(f[COL_RAW.SUBMISSION_TIME] || '').trim();
+      // Sin fecha de registro → siempre importar (no bloquear)
+      if (!subTime) return true;
+      return !idsExistentes.has(subTime);
     });
 
     if (filasNuevas.length === 0) {
@@ -1108,18 +1102,20 @@ function _fetchCSV(url) {
   return respuesta.getContentText('UTF-8');
 }
 
-/** Retorna un Set con todos los _uuid y _id ya importados en la hoja DATOS. */
+/**
+ * Retorna un Set con las fechas de registro (submission_time normalizados)
+ * ya importadas en la hoja DATOS. Usado para evitar duplicados.
+ */
 function _obtenerIDsExistentes() {
   const hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJAS.DATOS);
   if (!hoja || hoja.getLastRow() < 2) return new Set();
 
+  const colIdx = HEADERS_DATOS.indexOf(COL.SUBMISSION_TIME) + 1;
+  if (colIdx === 0) return new Set();
+
+  const valores = hoja.getRange(2, colIdx, hoja.getLastRow() - 1, 1).getValues();
   const ids = new Set();
-  [COL.UUID, COL.KOBO_ID].forEach(colNombre => {
-    const colIdx = HEADERS_DATOS.indexOf(colNombre) + 1;
-    if (colIdx === 0) return;
-    const valores = hoja.getRange(2, colIdx, hoja.getLastRow() - 1, 1).getValues();
-    valores.flat().forEach(v => { const s = String(v).trim(); if (s) ids.add(s); });
-  });
+  valores.flat().forEach(v => { const s = String(v).trim(); if (s) ids.add(s); });
   return ids;
 }
 
